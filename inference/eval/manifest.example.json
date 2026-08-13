@@ -1,0 +1,11 @@
+{
+  "_comment": "Copy to manifest.json and point each 'file' at a real clip in eval/clips/. 'reference' is the ground-truth transcript. Keep RU and EN balanced. Generate clips with eval/gen_clips.py (edge-tts) or drop in public-domain speech. Audio files are gitignored — commit only the manifest + references.",
+  "clips": [
+    { "file": "clips/ru_01.wav", "lang": "ru", "reference": "Соединение установлено. Чем могу помочь сегодня?" },
+    { "file": "clips/ru_02.wav", "lang": "ru", "reference": "Lighthouse сто это наш минимум а не цель." },
+    { "file": "clips/ru_03.wav", "lang": "ru", "reference": "Расскажи про токенизацию и контекстное окно модели." },
+    { "file": "clips/en_01.wav", "lang": "en", "reference": "Connection established. How can I help you today?" },
+    { "file": "clips/en_02.wav", "lang": "en", "reference": "Every kilobyte must be justified in production." },
+    { "file": "clips/en_03.wav", "lang": "en", "reference": "Explain retrieval augmented generation in one sentence." }
+  ]
+}

@@ -1,0 +1,88 @@
+---
+import BaseLayout from '@layouts/BaseLayout.astro';
+import Header from '@components/layout/Header.astro';
+import Footer from '@components/layout/Footer.astro';
+import HeroCanvas from '@components/sections/HeroCanvas.astro';
+import AboutSection from '@components/sections/AboutSection.astro';
+import LabSection from '@components/sections/LabSection.astro';
+import StackSection from '@components/sections/StackSection.astro';
+import ContactSection from '@components/sections/ContactSection.astro';
+import FaqSection from '@components/sections/FaqSection.astro';
+import VKVLogo from '@components/ui/VKVLogo.svelte';
+import SynapseApp from '@components/ui/SynapseApp.svelte';
+import NeuralWaypoints from '@components/ui/NeuralWaypoints.svelte';
+import ConstellationNav from '@components/ui/ConstellationNav.svelte';
+import { supportedLangs } from '@i18n/utils';
+import { FAQ } from '@/data/faq';
+import type { Lang } from '@i18n/utils';
+import type { GetStaticPaths } from 'astro';
+
+export const getStaticPaths = (() => {
+  return supportedLangs.map((lang) => ({
+    params: { lang },
+  }));
+}) satisfies GetStaticPaths;
+
+const { lang } = Astro.params as { lang: Lang };
+
+// FAQPage lives HERE and only here — on the one page that actually renders
+// these questions and answers. It used to sit in BaseLayout and therefore on
+// all 12 pages, none of which showed the text; the privacy policy was carrying
+// "Can I hire Valery?" in its structured data. Built from the same FAQ array
+// the visible section maps over, so the two cannot drift apart.
+const faqJsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'FAQPage',
+  mainEntity: FAQ.map((item) => ({
+    '@type': 'Question',
+    name: item.q[lang],
+    acceptedAnswer: { '@type': 'Answer', text: item.a[lang] },
+  })),
+};
+---
+
+<BaseLayout lang={lang} jsonLd={[faqJsonLd]}>
+  {/*
+    Phase 1.7 Navigation Revolution:
+    - Header: only MenuPill (three dots) — dispatches vkv:constellation-toggle event
+    - ConstellationNav: fullscreen overlay, self-contained (listens to window event)
+    - VKVLogo: scroll journey (hero → fade → career arc → fixed pill)
+    - SynapseBrain: bottom-right video scrub (brain → synapse morph)
+    - NeuralWaypoints: right-side vertical navigation dots
+  */}
+  <Header lang={lang} />
+
+  {/* ConstellationNav — fullscreen overlay triggered by MenuPill */}
+  <ConstellationNav lang={lang} client:idle />
+
+  {/* VKV Logo — manages its own fixed/absolute positioning */}
+  <VKVLogo lang={lang} client:idle />
+
+  <main id="main-content">
+    <HeroCanvas lang={lang} />
+    <AboutSection lang={lang} />
+    <LabSection lang={lang} />
+    <StackSection lang={lang} />
+    <FaqSection lang={lang} />
+    <ContactSection lang={lang} />
+  </main>
+
+  {/* Neural Waypoints — right-side vertical navigation (hidden on mobile) */}
+  <NeuralWaypoints lang={lang} client:visible />
+
+  {/* Synapse App — brain trigger + terminal overlay */}
+  <SynapseApp client:idle lang={lang} />
+
+  <Footer lang={lang} />
+</BaseLayout>
+
+<script>
+  import { initSectionAnimations } from '@scripts/section-animations';
+
+  // Initialize after DOM is ready (Lenis already started in HeroCanvas)
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initSectionAnimations);
+  } else {
+    initSectionAnimations();
+  }
+</script>

@@ -1,0 +1,516 @@
+/**
+ * VKVstudio — Section Animations (GSAP ScrollTrigger)
+ *
+ * Orchestrates all scroll-triggered animations:
+ *   - About: label/headline/body reveal + timeline items stagger
+ *   - Lab: header reveal + cards translateZ entrance stagger
+ *   - Stack: header reveal + badges stagger
+ *   - Contact: scale-up + opacity reveal
+ *
+ * All animations are disabled for prefers-reduced-motion.
+ * Lenis must be initialized before this script runs.
+ *
+ * Usage: import '@scripts/section-animations' in the page script.
+ */
+
+import { gsap } from 'gsap';
+import { ScrollTrigger } from 'gsap/ScrollTrigger';
+
+/* ── Register plugin ───────────────────────────────────────── */
+
+gsap.registerPlugin(ScrollTrigger);
+
+/* ── Reduced motion guard ──────────────────────────────────── */
+
+const prefersReducedMotion = window.matchMedia(
+  '(prefers-reduced-motion: reduce)'
+).matches;
+
+/** If user prefers reduced motion, make everything visible immediately */
+function disableAnimations(): void {
+  const allAnimated = document.querySelectorAll<HTMLElement>(
+    '.js-about-reveal, .js-timeline-item, .js-timeline-dot, .js-timeline-card, .js-timeline-line, .js-lab-header, .js-lab-card, .lab__card-visual, .lab__card-content, .lab__card-cta, .js-stack-header, .js-stack-card, .js-stack-glass, .js-contact-reveal'
+  );
+  allAnimated.forEach((el) => {
+    el.style.opacity = '1';
+    el.style.transform = 'none';
+    el.style.filter = 'none';
+  });
+}
+
+/* ── Main init ─────────────────────────────────────────────── */
+
+export function initSectionAnimations(): void {
+  if (prefersReducedMotion) {
+    disableAnimations();
+    return;
+  }
+
+  initAboutAnimations();
+  initLabAnimations();
+  initStackAnimations();
+  initContactAnimations();
+}
+
+/* ── ABOUT SECTION ─────────────────────────────────────────── */
+
+function initAboutAnimations(): void {
+  const section = document.getElementById('about');
+  if (!section) return;
+
+  // Reveal elements stagger (label, headline, body, philosophy)
+  const revealEls = section.querySelectorAll<HTMLElement>('.js-about-reveal');
+
+  if (revealEls.length > 0) {
+    gsap.fromTo(
+      revealEls,
+      { opacity: 0, y: 40 },
+      {
+        opacity: 1,
+        y: 0,
+        duration: 0.8,
+        stagger: 0.15,
+        ease: 'expo.out',
+        scrollTrigger: {
+          trigger: section,
+          start: 'top 80%',
+          toggleActions: 'play none none none',
+        },
+      }
+    );
+  }
+
+  // ── PREMIUM TIMELINE: "Neural Signal Propagation" ──────────
+
+  const timeline = section.querySelector<HTMLElement>('.about__timeline');
+  if (!timeline) return;
+
+  // 1. VERTICAL LINE — position from first dot center to last dot center, then grow
+  const line = timeline.querySelector<HTMLElement>('.js-timeline-line');
+  const dots = timeline.querySelectorAll<HTMLElement>('.js-timeline-dot');
+
+  if (line && dots.length >= 2) {
+    const timelineRect = timeline.getBoundingClientRect();
+    const firstDot = dots[0];
+    const lastDot = dots[dots.length - 1];
+    const firstDotRect = firstDot.getBoundingClientRect();
+    const lastDotRect = lastDot.getBoundingClientRect();
+
+    // Calculate top/height relative to timeline container
+    const lineTop = firstDotRect.top - timelineRect.top + firstDotRect.height / 2;
+    const lineBottom = lastDotRect.top - timelineRect.top + lastDotRect.height / 2;
+    const lineHeight = lineBottom - lineTop;
+
+    line.style.top = `${lineTop}px`;
+    line.style.height = `${lineHeight}px`;
+
+    gsap.to(line, {
+      scaleY: 1,
+      ease: 'none',
+      scrollTrigger: {
+        trigger: timeline,
+        start: 'top 75%',
+        end: 'bottom 40%',
+        scrub: 0.8,
+      },
+    });
+  }
+
+  // 2. TIMELINE ITEMS — individual per-item choreography
+  const items = timeline.querySelectorAll<HTMLElement>('.js-timeline-item');
+
+  items.forEach((item, index) => {
+    const dot = item.querySelector<HTMLElement>('.js-timeline-dot');
+    const icon = item.querySelector<HTMLElement>('.timeline-item__icon');
+    const card = item.querySelector<HTMLElement>('.js-timeline-card');
+
+    // ── Create per-item timeline ─────────────────────────────
+    const itemTl = gsap.timeline({
+      scrollTrigger: {
+        trigger: item,
+        start: 'top 78%',
+        toggleActions: 'play none none none',
+      },
+    });
+
+    // Phase 1: Dot springs into existence
+    if (dot) {
+      itemTl.fromTo(
+        dot,
+        {
+          scale: 0,
+          boxShadow: '0 0 0px transparent',
+        },
+        {
+          scale: 1,
+          boxShadow: '0 0 20px hsla(155, 70%, 50%, 0.4)',
+          duration: 0.6,
+          ease: 'back.out(2.5)',
+          onComplete: () => {
+            // Activate perpetual glow pulse
+            dot.classList.add('is-active');
+          },
+        },
+        0
+      );
+    }
+
+    // Phase 2: Icon rotates in (slightly delayed)
+    if (icon) {
+      itemTl.fromTo(
+        icon,
+        { rotation: -90, scale: 0.6, opacity: 0 },
+        {
+          rotation: 0,
+          scale: 1,
+          opacity: 1,
+          duration: 0.5,
+          ease: 'back.out(1.8)',
+        },
+        0.15
+      );
+    }
+
+    // Phase 3: Card slides in from blur
+    if (card) {
+      itemTl.fromTo(
+        card,
+        {
+          opacity: 0,
+          x: -30,
+          filter: 'blur(6px)',
+        },
+        {
+          opacity: 1,
+          x: 0,
+          filter: 'blur(0px)',
+          duration: 0.7,
+          ease: 'expo.out',
+        },
+        0.25
+      );
+    }
+  });
+}
+
+/* ── LAB SECTION ───────────────────────────────────────────── */
+
+function initLabAnimations(): void {
+  const section = document.getElementById('lab');
+  if (!section) return;
+
+  // Header reveal
+  const header = section.querySelector<HTMLElement>('.js-lab-header');
+  if (header) {
+    gsap.fromTo(
+      header,
+      { opacity: 0, y: 40 },
+      {
+        opacity: 1,
+        y: 0,
+        duration: 0.8,
+        ease: 'expo.out',
+        scrollTrigger: {
+          trigger: header,
+          start: 'top 85%',
+          toggleActions: 'play none none none',
+        },
+      }
+    );
+  }
+
+  // Cards: per-card premium choreography
+  const cards = section.querySelectorAll<HTMLElement>('.js-lab-card');
+
+  cards.forEach((card, index) => {
+    const visual = card.querySelector<HTMLElement>('.lab__card-visual');
+    const content = card.querySelector<HTMLElement>('.lab__card-content');
+    const cta = card.querySelector<HTMLElement>('.lab__card-cta');
+
+    const cardTl = gsap.timeline({
+      scrollTrigger: {
+        trigger: card,
+        start: 'top 82%',
+        toggleActions: 'play none none none',
+      },
+    });
+
+    // Phase 1: Card wrapper fades in with scale
+    cardTl.fromTo(
+      card,
+      { opacity: 0, y: 50, scale: 0.92 },
+      {
+        opacity: 1,
+        y: 0,
+        scale: 1,
+        duration: 0.7,
+        ease: 'expo.out',
+      },
+      0
+    );
+
+    // Phase 2: Image reveals with slight zoom out
+    if (visual) {
+      cardTl.fromTo(
+        visual,
+        { scale: 1.15, opacity: 0 },
+        {
+          scale: 1,
+          opacity: 1,
+          duration: 0.8,
+          ease: 'power2.out',
+        },
+        0.15
+      );
+    }
+
+    // Phase 3: Content slides up
+    if (content) {
+      cardTl.fromTo(
+        content,
+        { opacity: 0, y: 20 },
+        {
+          opacity: 1,
+          y: 0,
+          duration: 0.5,
+          ease: 'expo.out',
+        },
+        0.35
+      );
+    }
+
+    // Phase 4: CTA fades in
+    if (cta) {
+      cardTl.fromTo(
+        cta,
+        { opacity: 0, x: -8 },
+        {
+          opacity: 0.6,
+          x: 0,
+          duration: 0.4,
+          ease: 'power2.out',
+        },
+        0.5
+      );
+    }
+  });
+}
+
+/* ── STACK SECTION ─────────────────────────────────────────── */
+
+function initStackAnimations(): void {
+  const section = document.getElementById('stack');
+  if (!section) return;
+
+  // Header reveal
+  const header = section.querySelector<HTMLElement>('.js-stack-header');
+  if (header) {
+    gsap.fromTo(
+      header,
+      { opacity: 0, y: 40 },
+      {
+        opacity: 1,
+        y: 0,
+        duration: 0.8,
+        ease: 'expo.out',
+        scrollTrigger: {
+          trigger: header,
+          start: 'top 85%',
+          toggleActions: 'play none none none',
+        },
+      }
+    );
+  }
+
+  // Cards: staggered reveal with scale + subtle rotation
+  const cards = section.querySelectorAll<HTMLElement>('.js-stack-card');
+
+  if (cards.length > 0) {
+    gsap.fromTo(
+      cards,
+      { opacity: 0, y: 40, scale: 0.9 },
+      {
+        opacity: 1,
+        y: 0,
+        scale: 1,
+        duration: 0.7,
+        stagger: 0.08,
+        ease: 'expo.out',
+        scrollTrigger: {
+          trigger: section.querySelector('.stack__grid'),
+          start: 'top 80%',
+          toggleActions: 'play none none none',
+          onEnter: () => drawNeuralLines(section),
+        },
+      }
+    );
+  }
+
+  // ── Mouse tracking: glass parallax + iris reveal ──
+  const MASK_CLOSED = 28;
+  const MASK_OPEN = 65;
+
+  cards.forEach((card) => {
+    const glass = card.querySelector<HTMLElement>('.js-stack-glass');
+    const logoImg = card.querySelector<HTMLElement>('.stack__card-logo-img');
+    if (!glass) return;
+
+    const maxShift = 6;
+    const state = { maskSize: MASK_CLOSED };
+
+    // Set initial mask
+    applyMask(glass, MASK_CLOSED);
+
+    // ── Hover: Iris opens ──
+    card.addEventListener('mouseenter', () => {
+      gsap.killTweensOf(state);
+      gsap.to(state, {
+        maskSize: MASK_OPEN,
+        duration: 0.65,
+        ease: 'power3.out',
+        onUpdate: () => applyMask(glass, state.maskSize),
+      });
+
+      // Glass becomes more transparent when open
+      gsap.to(glass, { opacity: 0.6, duration: 0.5, ease: 'power2.out' });
+
+      // Logo glows stronger
+      if (logoImg) {
+        gsap.to(logoImg, {
+          filter: 'drop-shadow(0 0 24px hsla(155, 70%, 50%, 0.6))',
+          scale: 1.05,
+          duration: 0.5,
+          ease: 'power2.out',
+        });
+      }
+    });
+
+    // ── Mouse move: parallax shift ──
+    card.addEventListener('mousemove', (e: MouseEvent) => {
+      const rect = card.getBoundingClientRect();
+      const x = (e.clientX - rect.left) / rect.width - 0.5;
+      const y = (e.clientY - rect.top) / rect.height - 0.5;
+
+      gsap.to(glass, {
+        x: -x * maxShift * 2,
+        y: -y * maxShift * 2,
+        duration: 0.4,
+        ease: 'power2.out',
+      });
+    });
+
+    // ── Mouse leave: Iris closes ──
+    card.addEventListener('mouseleave', () => {
+      gsap.killTweensOf(state);
+      gsap.to(state, {
+        maskSize: MASK_CLOSED,
+        duration: 0.5,
+        ease: 'power2.inOut',
+        onUpdate: () => applyMask(glass, state.maskSize),
+      });
+
+      // Glass returns to full opacity
+      gsap.to(glass, {
+        x: 0, y: 0, opacity: 1,
+        duration: 0.5,
+        ease: 'elastic.out(1, 0.5)',
+      });
+
+      // Logo glow resets
+      if (logoImg) {
+        gsap.to(logoImg, {
+          filter: 'drop-shadow(0 0 12px hsla(155, 70%, 50%, 0.3))',
+          scale: 1,
+          duration: 0.4,
+          ease: 'power2.out',
+        });
+      }
+    });
+  });
+}
+
+/** Apply radial mask with given circle size */
+function applyMask(el: HTMLElement, size: number): void {
+  const mask = `radial-gradient(circle ${size}% at 50% 35%, transparent 94%, hsla(155,65%,50%,0.12) 96%, black 100%)`;
+  el.style.maskImage = mask;
+  el.style.webkitMaskImage = mask;
+}
+
+/** Draw neural connection lines between card centers */
+function drawNeuralLines(section: HTMLElement): void {
+  const svg = section.querySelector<SVGSVGElement>('.js-neural-svg');
+  const cards = section.querySelectorAll<HTMLElement>('.js-stack-card');
+  if (!svg || cards.length < 2) return;
+
+  const wrapRect = svg.parentElement!.getBoundingClientRect();
+  svg.replaceChildren();
+
+  // Compute card centers relative to wrapper
+  const centers: { x: number; y: number }[] = [];
+  cards.forEach((card) => {
+    const r = card.getBoundingClientRect();
+    centers.push({
+      x: r.left + r.width / 2 - wrapRect.left,
+      y: r.top + r.height / 2 - wrapRect.top,
+    });
+  });
+
+  // Connect adjacent cards (horizontal + vertical neighbors in 4-column grid)
+  const cols = getComputedStyle(section.querySelector('.stack__grid')!)
+    .gridTemplateColumns.split(' ').length;
+
+  for (let i = 0; i < centers.length; i++) {
+    // Right neighbor
+    if ((i + 1) % cols !== 0 && i + 1 < centers.length) {
+      addLine(svg, centers[i], centers[i + 1], i * 0.15);
+    }
+    // Bottom neighbor
+    if (i + cols < centers.length) {
+      addLine(svg, centers[i], centers[i + cols], i * 0.15 + 0.05);
+    }
+  }
+
+  // Trigger visibility after a beat
+  requestAnimationFrame(() => svg.classList.add('is-visible'));
+}
+
+function addLine(
+  svg: SVGSVGElement,
+  a: { x: number; y: number },
+  b: { x: number; y: number },
+  delay: number
+): void {
+  const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+  line.setAttribute('x1', String(a.x));
+  line.setAttribute('y1', String(a.y));
+  line.setAttribute('x2', String(b.x));
+  line.setAttribute('y2', String(b.y));
+  line.style.animationDelay = `${delay}s`;
+  svg.appendChild(line);
+}
+
+/* ── CONTACT SECTION ───────────────────────────────────────── */
+
+function initContactAnimations(): void {
+  const section = document.getElementById('contact');
+  if (!section) return;
+
+  const inner = section.querySelector<HTMLElement>('.js-contact-reveal');
+  if (!inner) return;
+
+  gsap.fromTo(
+    inner,
+    { opacity: 0, scale: 0.92 },
+    {
+      opacity: 1,
+      scale: 1,
+      duration: 0.9,
+      ease: 'back.out(1.4)',
+      scrollTrigger: {
+        trigger: section,
+        start: 'top 75%',
+        toggleActions: 'play none none none',
+      },
+    }
+  );
+}

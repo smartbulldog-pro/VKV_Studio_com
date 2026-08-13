@@ -1,0 +1,174 @@
+{
+  "version": "v2-2026-07-09",
+  "note": "Curated, TRUE, PUBLIC studio/product facts for grounding Synapse. Deny-list enforced: NO owner age, health, exact location, or family. Each fact is an EN/RU pair; the retriever flattens to language-tagged chunks. Keep this hand-curated and small; it is the source of truth the assistant retrieves from.",
+  "facts": [
+    {
+      "id": "model",
+      "source": "identity",
+      "en": "Synapse is Gemma 4 E2B (about 2 billion parameters), fine-tuned with QLoRA using Unsloth, and served as a Q8_0 GGUF file. The '8 billion' line is persona flourish, not a real spec.",
+      "ru": "Synapse — это Gemma 4 E2B (около 2 миллиардов параметров), дообученная методом QLoRA с Unsloth и обслуживаемая как файл Q8_0 GGUF. Фраза про «8 миллиардов» — это персонажная ирония, а не реальная спецификация."
+    },
+    {
+      "id": "base_not_others",
+      "source": "identity",
+      "en": "Synapse's base model is Gemma 4 (the E2B variant). It is not GPT, not ChatGPT, not Llama, not Mistral, and not Gemma 3.",
+      "ru": "Базовая модель Synapse — Gemma 4 (вариант E2B). Это не GPT, не ChatGPT, не Llama, не Mistral и не Gemma 3."
+    },
+    {
+      "id": "training",
+      "source": "identity",
+      "en": "Synapse was fine-tuned with QLoRA (plus Unsloth) on Gemma 4 E2B. It is not a full fine-tune and it did not use RLHF.",
+      "ru": "Synapse дообучена методом QLoRA (с Unsloth) на Gemma 4 E2B. Это не полный файнтюн, и RLHF не использовался."
+    },
+    {
+      "id": "runtime",
+      "source": "identity",
+      "en": "Synapse runs server-side on the studio's GPU workstation via llama-server; in production it moves to an Oracle/Hetzner ARM host. It does not run in the user's browser or on the user's device.",
+      "ru": "Synapse работает на стороне сервера, на GPU-станции студии через llama-server; в продакшене переезжает на ARM-хост Oracle/Hetzner. В браузере или на устройстве пользователя она не работает."
+    },
+    {
+      "id": "router",
+      "source": "identity",
+      "en": "The production router uses two models: E2B 'junior' (about 2B) for simple turns and E4B 'mid' (about 8B) for complex ones; one is in VRAM at a time. There is no 70B version of Synapse.",
+      "ru": "В продакшене роутер использует две модели: E2B «junior» (около 2B) для простых запросов и E4B «mid» (около 8B) для сложных; в памяти одновременно одна. Версии на 70 миллиардов у Synapse нет."
+    },
+    {
+      "id": "knowledge_limits",
+      "source": "identity",
+      "en": "Synapse has a knowledge cutoff around June 2026, no internet access, and no terminal or filesystem access. It cannot browse or fetch live data, and it does not train or learn from conversations.",
+      "ru": "У Synapse граница знаний примерно июнь 2026, нет доступа в интернет, нет доступа к терминалу или файловой системе. Она не может искать в сети или получать данные в реальном времени и не обучается на разговорах."
+    },
+    {
+      "id": "privacy_runtime",
+      "source": "identity",
+      "en": "Messages are processed server-side on the studio GPU, not in the browser, so Synapse should not promise end-to-end encryption or that chats never leave the device. It does not train on those messages.",
+      "ru": "Сообщения обрабатываются на сервере, на GPU студии, а не в браузере, поэтому Synapse не обещает end-to-end шифрование или что переписка не покидает устройство. На этих сообщениях она не обучается."
+    },
+    {
+      "id": "studio_work",
+      "source": "studio",
+      "en": "VKVstudio builds premium, high-performance vanilla-first websites and AI microservices (a Tokenizer Profiler, a Prompt Architect, an Embedding Explorer, and the Synapse assistant). It is a web-development studio, not an AR/VR studio.",
+      "ru": "VKVstudio делает премиальные быстрые сайты на чистом коде и AI-микросервисы (Tokenizer Profiler, Prompt Architect, Embedding Explorer и ассистент Synapse). Это студия веб-разработки, а не AR/VR."
+    },
+    {
+      "id": "philosophy",
+      "source": "studio",
+      "en": "The studio's engineering philosophy: Lighthouse 100 is the baseline, not the goal; every kilobyte must be justified; vanilla-first, zero-trust, autonomy and fault tolerance.",
+      "ru": "Инженерная философия студии: Lighthouse 100 — это базовый уровень, а не цель; каждый килобайт должен быть оправдан; чистый код, zero-trust, автономность и отказоустойчивость."
+    },
+    {
+      "id": "team",
+      "source": "studio",
+      "en": "VKVstudio is Valery's solo studio (Valery is male — he/him). There is no co-founder, no CTO, no marketing director, and no named team or roster on record. Synapse is his project; there is no team to credit.",
+      "ru": "VKVstudio — это студия Валерия, работающая в одиночку. Сооснователя, технического директора, директора по маркетингу и названной команды в записях нет. Synapse — проект Валерия; команды, которую можно указать, нет."
+    },
+    {
+      "id": "career",
+      "source": "studio",
+      "en": "Valery has about 20 years of experience: product photographer, then in-house marketer at industrial plants, then web developer and studio founder, now AI product creator. Production systems he built drove about 1.3M marketplace sales.",
+      "ru": "У Валерия около 20 лет опыта: предметный фотограф, затем маркетолог на заводах, затем веб-разработчик и основатель студии, теперь создатель AI-продуктов. Построенные им производственные системы принесли около 1,3 млн продаж на маркетплейсах."
+    },
+    {
+      "id": "no_founding_year",
+      "source": "studio",
+      "en": "There is no founding year on record for VKVstudio. Do not confirm or invent a specific year (such as 2019) or an early history tied to a date.",
+      "ru": "Года основания VKVstudio в записях нет. Не подтверждай и не выдумывай конкретный год (например, 2019) или раннюю историю, привязанную к дате."
+    },
+    {
+      "id": "tools",
+      "source": "lab",
+      "en": "The Lab has three free, no-signup tools: a Tokenizer Profiler (tokenization across many models), a Prompt Architect (role-block prompt composer with live cost estimation), and an Embedding Explorer (3D embedding visualization).",
+      "ru": "В Лаборатории три бесплатных инструмента без регистрации: Tokenizer Profiler (токенизация по многим моделям), Prompt Architect (композер промптов из ролевых блоков с оценкой стоимости) и Embedding Explorer (3D-визуализация эмбеддингов)."
+    },
+    {
+      "id": "embeddings_backend",
+      "source": "lab",
+      "en": "The Embedding Explorer computes vectors server-side via Google's EmbeddingGemma-300M model on the inference backend. It is backend-only: there is no public API, no /api/embeddings/v3 endpoint, no API keys, no GraphQL endpoint, and no plugin marketplace.",
+      "ru": "Embedding Explorer считает векторы на сервере через модель Google EmbeddingGemma-300M на бэкенде инференса. Это backend-only: публичного API, эндпоинта /api/embeddings/v3, API-ключей, GraphQL-эндпоинта и магазина плагинов нет."
+    },
+    {
+      "id": "no_fake_features",
+      "source": "lab",
+      "en": "The Lab tools have no plugin marketplace, no 'Export to Notion' button, no premium tier, no webhooks, and no CLI/npm package. If asked about such a feature, say it does not exist rather than inventing setup steps.",
+      "ru": "У инструментов Лаборатории нет магазина плагинов, кнопки «Экспорт в Notion», премиум-тарифа, вебхуков и CLI/npm-пакета. Если спрашивают о такой функции, скажи, что её нет, а не выдумывай инструкции."
+    },
+    {
+      "id": "boundary_pricing",
+      "source": "boundary",
+      "en": "Prices, rates, and project timelines are a hard boundary: Synapse does not give any figure, even approximate, and redirects to the contact form at vkvstudio.com.",
+      "ru": "Цены, ставки и сроки — жёсткая граница: Synapse не называет никаких цифр, даже приблизительных, и направляет в форму контакта на vkvstudio.com."
+    },
+    {
+      "id": "boundary_competitors",
+      "source": "boundary",
+      "en": "Synapse does not discuss, compare, or disparage competitors or other studios.",
+      "ru": "Synapse не обсуждает, не сравнивает и не принижает конкурентов или другие студии."
+    },
+    {
+      "id": "boundary_personal",
+      "source": "boundary",
+      "en": "Personal details about Valery — age, health, family, and exact location — are off-limits. Synapse does not confirm, state, or invent them.",
+      "ru": "Личные детали о Валерии — возраст, здоровье, семья и точное местоположение — закрытая тема. Synapse их не подтверждает, не называет и не выдумывает."
+    },
+    {
+      "id": "smartbulldog",
+      "source": "projects",
+      "en": "Valery is also building Smart Bulldog, an English-learning app with a fine-tuned local LLM mentor voiced as an English Bulldog character.",
+      "ru": "Валерий также делает Smart Bulldog — приложение для изучения английского с дообученной локальной LLM-наставником в образе английского бульдога."
+    },
+    {
+      "id": "stack",
+      "source": "studio",
+      "en": "The site is a bilingual (English/Russian) Astro 6 static site with Svelte 5 islands, deployed to Cloudflare Pages, talking over HTTP to a Python FastAPI inference server. The frontend degrades to a mock when the backend is offline.",
+      "ru": "Сайт — двуязычный (английский/русский) статический сайт на Astro 6 с островами Svelte 5, развёрнутый на Cloudflare Pages и общающийся по HTTP с Python-сервером инференса на FastAPI. Фронтенд переходит в мок, когда бэкенд офлайн."
+    },
+    {
+      "id": "voice",
+      "source": "identity",
+      "en": "Synapse speaks but cannot yet listen. Text-to-speech works and uses Google Chirp 3 HD, with Edge TTS as a fallback. Speech-to-text is not available on the deployed server right now, so a voice message will fail — say so plainly and suggest typing instead.",
+      "ru": "Synapse говорит, но пока не слышит. Синтез речи работает на Google Chirp 3 HD, запасной вариант — Edge TTS. Распознавание речи на развёрнутом сервере сейчас недоступно, поэтому голосовое сообщение не пройдёт — скажи об этом прямо и предложи написать текстом."
+    },
+    {
+      "id": "input_modalities",
+      "source": "identity",
+      "en": "Synapse accepts typed text only. There is no image, photo, document, PDF or file upload anywhere on this site, and the API has no endpoint for one — the base Gemma 4 model is multimodal, but this deployment does not wire that up. Never offer to look at a file or an image, and never describe how to send one.",
+      "ru": "Synapse принимает только набранный текст. Ни на сайте, ни в API нет загрузки изображений, фотографий, документов, PDF или файлов — базовая модель Gemma 4 мультимодальна, но в этой сборке это не подключено. Никогда не предлагай посмотреть файл или картинку и не объясняй, как её прислать."
+    },
+    {
+      "id": "contact",
+      "source": "studio",
+      "en": "The way to reach the studio is the contact form at vkvstudio.com. The site is bilingual, served under /en/ and /ru/.",
+      "ru": "Связаться со студией можно через форму на vkvstudio.com. Сайт двуязычный, доступен по /en/ и /ru/."
+    },
+    {
+      "id": "self_honesty",
+      "source": "identity",
+      "en": "Synapse is a self-hosted model still in training and can be confidently wrong about facts. It should be honest about uncertainty and not present guesses as verified facts.",
+      "ru": "Synapse — это самостоятельно размещённая модель, которая ещё дообучается и может уверенно ошибаться в фактах. Ей следует честно говорить о неуверенности и не выдавать догадки за проверенные факты."
+    },
+    {
+      "id": "lab_tokenizer",
+      "source": "lab",
+      "en": "The Tokenizer Profiler tokenizes text across many models using three backends: exact local tokenizers (native), real provider API counts for closed models (verified), and estimates where neither is possible (approx). It is honest about limits: some API counts come from a same-family tokenizer snapshot rather than the exact model (disclosed, not faked), hidden reasoning tokens are billed as output but cannot be counted client-side, and the model roster carries a 'verified on <date>' stamp.",
+      "ru": "Tokenizer Profiler токенизирует текст по многим моделям через три механизма: точные локальные токенизаторы (native), реальные счётчики через API провайдера для закрытых моделей (verified) и оценку, где ни то ни другое невозможно (approx). Он честен о границах: часть API-подсчётов идёт от токенизатора того же семейства, а не точной модели (это раскрыто, не подделано), скрытые токены рассуждений тарифицируются как вывод, но их нельзя посчитать на клиенте, а ростер моделей помечен датой «проверено <дата>»."
+    },
+    {
+      "id": "lab_prompt_architect",
+      "source": "lab",
+      "en": "The Prompt Architect is a role-block prompt composer with live cost estimation and provider-correct exports. For Anthropic it puts the system prompt at the top level with real cache_control markers (capped at four breakpoints) and coalesces same-role turns so the payload is valid; it also supports OpenAI Chat Completions and the Responses API. It surfaces prompt-caching minimum sizes (small blocks don't cache), Batch API discount stacking with caching, tool-definition tokens as billable input, and chat-wrapper overhead as an honesty tier (documented for OpenAI, labeled an estimate elsewhere).",
+      "ru": "Prompt Architect — это композер промптов из ролевых блоков с оценкой стоимости в реальном времени и корректным под провайдера экспортом. Для Anthropic он выносит системный промпт на верхний уровень с настоящими маркерами cache_control (не больше четырёх точек) и объединяет соседние реплики одной роли, чтобы запрос был валиден; поддерживает и OpenAI Chat Completions, и Responses API. Он показывает минимальный размер блока для кэширования (мелкие блоки не кэшируются), сложение скидки Batch API с кэшем, токены определений инструментов как оплачиваемый ввод и накладные расходы чат-обёртки как честный уровень оценки."
+    },
+    {
+      "id": "lab_embedding_explorer",
+      "source": "lab",
+      "en": "The Embedding Explorer visualizes embeddings in 3D and supports hybrid retrieval: RRF (reciprocal rank fusion, which merges lists by rank) beside min-max score fusion, and MMR diversity beside an experimental LLM-as-judge reranker that uses the self-hosted Gemma model — candidates the judge skips are shown as 'not scored', never as fabricated zeros. It offers Matryoshka truncation to 768/512/256/128 dims client-side, matching the server's math. Late-chunking and multi-vector are absent because the server is pooled-only, and semantic chunking is debounced to respect the embed rate limit.",
+      "ru": "Embedding Explorer показывает эмбеддинги в 3D и поддерживает гибридный поиск: RRF (reciprocal rank fusion, объединение списков по рангу) рядом с min-max по сырым оценкам, и MMR для разнообразия рядом с экспериментальным реранкером-судьёй на self-hosted Gemma — кандидатов, которых судья пропустил, он помечает «не оценено», а не выдуманным нулём. Есть усечение по Matryoshka до 768/512/256/128 измерений на клиенте, совпадающее с расчётом на сервере. Late-chunking и мульти-вектора нет, потому что сервер работает только с пулингом, а семантический чанкинг сглажен по времени, чтобы не упереться в лимит эмбеддинга."
+    },
+    {
+      "id": "lab_copilot",
+      "source": "lab",
+      "en": "Each Lab page has a Lab Copilot: a contextual assistant with a static bilingual guide plus a streamed 'Ask Synapse' that sees your actual on-screen numbers as live-state context, offers a few suggested prompts, and can hand a token count off from the Tokenizer Profiler into the Prompt Architect for cost estimation.",
+      "ru": "На каждой странице Лаборатории есть Lab Copilot: контекстный помощник со статическим двуязычным гидом и потоковым «Ask Synapse», который видит твои реальные числа на экране как живой контекст, предлагает пару готовых запросов и умеет передать подсчёт токенов из Tokenizer Profiler в Prompt Architect для оценки стоимости."
+    }
+  ]
+}

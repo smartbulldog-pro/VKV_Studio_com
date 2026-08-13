@@ -1,0 +1,44 @@
+# Synapse Inference Server — Dependencies
+# ========================================
+# This file is the loose spec (floors only). For a REPRODUCIBLE, auditable build use
+# the pinned lockfile:  pip install -r requirements.lock  (pip freeze snapshot).
+# Regenerate the lock after intentional upgrades:  pip freeze > requirements.lock
+# Core
+fastapi>=0.115.0
+uvicorn[standard]>=0.32.0
+python-multipart>=0.0.18
+pydantic>=2.10.0
+
+# LLM + embeddings — Gemma 4 / EmbeddingGemma run via a `llama-server` SUBPROCESS
+# (see llm.py / embeddings.py), NOT the in-process llama-cpp-python bindings, so that
+# heavy Python wheel is intentionally not a dependency. Ship the platform-correct
+# `llama-server` binary in llama-bin/ instead (llama-server.exe on Windows,
+# `llama-server` ELF on the Linux/ARM deploy target).
+
+# API Clients for Exact Tokenization
+anthropic>=0.30.0
+google-genai>=0.2.0
+
+# Auth — verify Google Identity Services ID tokens for conversation ownership
+google-auth>=2.20.0
+
+# STT — audio decode/DSP for the Gemma-4 native-audio backend (GemmaSTT).
+# PyAV (ffmpeg) decodes any browser format; numpy does the resample/mono/normalize.
+# (faster-whisper REMOVED 2026-07-06 — consolidated STT onto Gemma-4 native audio.)
+av>=12.0.0
+numpy>=1.26.0
+
+# TTS — PRIMARY: Google Cloud Text-to-Speech "Chirp 3: HD"
+# ($30/1M chars, free 1M chars/month). Needs a service-account JSON via
+# SYNAPSE_GOOGLE_TTS_CREDENTIALS / GOOGLE_APPLICATION_CREDENTIALS.
+google-cloud-texttospeech>=2.21.0
+
+# TTS — FALLBACK: Microsoft Edge TTS (free, no key). Used automatically when
+# Google credentials are absent/invalid, and as the dev default.
+edge-tts>=6.1.0
+
+# (Removed 2026-07-05: Coqui `TTS` (XTTS v2) + `scipy`, and Silero/torch-TTS —
+#  consolidated onto Google Chirp 3 HD. Removed 2026-07-06: faster-whisper —
+#  STT consolidated onto Gemma-4 native audio. torch is NOT a direct requirement;
+#  it remains only as a transitive dep and supplies the CUDA runtime DLLs that
+#  llm.py puts on PATH for the llama-server child processes.)

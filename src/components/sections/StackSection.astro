@@ -1,0 +1,329 @@
+---
+/**
+ * StackSection — Technology stack with "Neural Substrate" effect
+ *
+ * Two-layer cards: logo sits on the grid substrate, glassmorphism overlay
+ * with circular cutout moves on mouse, creating parallax peek effect.
+ * Neural connection lines pulse between cards.
+ */
+import type { Lang } from '@i18n/utils';
+import { t } from '@i18n/utils';
+
+interface Props {
+  lang: Lang;
+}
+
+const { lang } = Astro.props;
+
+const stack = [
+  // === Ряд 1: Core (самые важные) ===
+  { name: 'Python',       categoryKey: 'backend',      image: '/icons/stack-python.png' },
+  { name: 'TypeScript',   categoryKey: 'language',     image: '/icons/stack-typeScript.png' },
+  { name: 'Astro',        categoryKey: 'framework',    image: '/icons/stack-astro.png' },
+  { name: 'Svelte',       categoryKey: 'ui',           image: '/icons/stack-svelte.png' },
+  { name: 'FastAPI',      categoryKey: 'apiServer',    image: '/icons/stack-fastAPI.png' },
+  { name: 'Gemma 4',      categoryKey: 'llm',          image: '/icons/stack-gemma4.png' },
+  { name: 'HuggingFace',  categoryKey: 'mlPlatform',   image: '/icons/stack-huggingFace.png' },
+  // === Ряд 2: Infrastructure & Tools ===
+  { name: 'ONNX',         categoryKey: 'mlRuntime',    image: '/icons/stack-onnx.png' },
+  { name: 'Three.js',     categoryKey: 'webgl3d',      image: '/icons/stack-threejs.png' },
+  { name: 'GSAP',         categoryKey: 'animation',    image: '/icons/stack-gsap.png' },
+  { name: 'Docker',       categoryKey: 'containers',   image: '/icons/stack-docker.png' },
+  { name: 'GCP',          categoryKey: 'cloud',        image: '/icons/stack-gcp.png' },
+  { name: 'Terraform',    categoryKey: 'iac',          image: '/icons/stack-terraform.png' },
+  { name: 'WebGPU',       categoryKey: 'gpuComputing', image: '/icons/stack-webgpu.png' },
+] as const;
+---
+
+<section class="stack-section" id="stack" aria-labelledby="stack-heading">
+  <div class="container">
+    {/* Header */}
+    <div class="stack__header js-stack-header">
+      <p class="text-mono stack__label">// tech stack</p>
+      <h2 id="stack-heading" class="stack__title">{t(lang, 'stack.title')}</h2>
+      <p class="stack__subtitle">{t(lang, 'stack.subtitle')}</p>
+    </div>
+
+    {/* Neural connection lines — drawn via JS */}
+    <div class="stack__grid-wrap">
+      <svg class="stack__neural-svg js-neural-svg" aria-hidden="true"></svg>
+
+      {/* Cards grid */}
+      <div class="stack__grid" role="list">
+        {stack.map((tech, index) => {
+          const categoryLabel = t(lang, `stack.category.${tech.categoryKey}`);
+          return (
+          <div
+            class="stack__card js-stack-card"
+            style={`--card-index: ${index}`}
+            role="listitem"
+            aria-label={`${tech.name} — ${categoryLabel}`}
+            data-name={tech.name}
+          >
+            {/* Layer 1: Logo on substrate (static) */}
+            <div class="stack__card-logo">
+              <picture>
+                <source srcset={tech.image.replace('.png', '.avif')} type="image/avif" />
+                <source srcset={tech.image.replace('.png', '.webp')} type="image/webp" />
+                <img src={tech.image} alt={`${tech.name} logo`} class="stack__card-logo-img" loading="lazy" />
+              </picture>
+            </div>
+
+            {/* Layer 1.5: Iris ring glow */}
+            <div class="stack__card-ring" aria-hidden="true"></div>
+
+            {/* Layer 2: Glass overlay (moves on mouse) */}
+            <div class="stack__card-glass js-stack-glass">
+              <div class="stack__card-info">
+                <span class="stack__card-name">{tech.name}</span>
+                <span class="stack__card-category text-mono">{categoryLabel}</span>
+              </div>
+            </div>
+          </div>
+          );
+        })}
+      </div>
+    </div>
+  </div>
+</section>
+
+<style>
+  /* ── Section layout ────────────────────────────────────── */
+  .stack-section {
+    padding-block: var(--section-gap);
+    background: linear-gradient(
+      to bottom,
+      var(--bg-obsidian),
+      var(--bg-graphite)
+    );
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* Grid background pattern — neural substrate */
+  .stack-section::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(hsla(155, 65%, 50%, 0.04) 1px, transparent 1px),
+      linear-gradient(90deg, hsla(155, 65%, 50%, 0.04) 1px, transparent 1px);
+    background-size: 60px 60px;
+    pointer-events: none;
+  }
+
+  /* ── Header ────────────────────────────────────────────── */
+  .stack__header {
+    margin-bottom: var(--space-16);
+    opacity: 0;
+  }
+
+  .stack__label {
+    margin-bottom: var(--space-4);
+  }
+
+  .stack__title {
+    font-size: var(--text-h1);
+    font-weight: var(--weight-bold);
+    color: var(--text-primary);
+    margin-bottom: var(--space-4);
+    letter-spacing: var(--tracking-tight);
+  }
+
+  .stack__subtitle {
+    font-size: var(--text-lg);
+    color: var(--text-secondary);
+    max-width: 48ch;
+  }
+
+  /* `<picture>` is inline by default — make it a transparent wrapper so the
+     flex-centered `<img>` inside lays out exactly as before. */
+  picture {
+    display: contents;
+  }
+
+  /* ── Grid wrapper (for neural SVG overlay) ──────────── */
+  .stack__grid-wrap {
+    position: relative;
+  }
+
+  .stack__neural-svg {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* ── Cards grid ────────────────────────────────────────── */
+  .stack__grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--space-4);
+    position: relative;
+    z-index: 1;
+  }
+
+  @media (min-width: 640px) {
+    .stack__grid {
+      grid-template-columns: repeat(4, 1fr);
+    }
+  }
+
+  @media (min-width: 960px) {
+    .stack__grid {
+      grid-template-columns: repeat(7, 1fr);
+    }
+  }
+
+  /* ── Card container ─────────────────────────────────── */
+  .stack__card {
+    position: relative;
+    aspect-ratio: 3 / 4;
+    border-radius: var(--radius-xl, 16px);
+    overflow: hidden;
+    cursor: default;
+    opacity: 0;
+    transform: translateY(40px) scale(0.9);
+  }
+
+  /* ── Layer 1: Logo on substrate (static) ────────────── */
+  .stack__card-logo {
+    position: absolute;
+    top: 8%;
+    left: 14%;
+    right: 14%;
+    bottom: 30%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1;
+  }
+
+  .stack__card-logo-img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    border-radius: var(--radius-lg);
+    filter: drop-shadow(0 0 12px hsla(155, 70%, 50%, 0.3));
+    transition: filter var(--duration-normal) var(--ease-out),
+                transform var(--duration-normal) var(--ease-out);
+  }
+
+  .stack__card:hover .stack__card-logo-img {
+    filter: drop-shadow(0 0 20px hsla(155, 70%, 50%, 0.5));
+  }
+
+  /* ── Layer 1.5: Iris ring glow ──────────────────────── */
+  .stack__card-ring {
+    position: absolute;
+    top: 5%;
+    left: 10%;
+    right: 10%;
+    bottom: 26%;
+    z-index: 1;
+    border-radius: var(--radius-lg);
+    border: 1.5px solid hsla(155, 65%, 50%, 0.08);
+    box-shadow: 0 0 8px hsla(155, 65%, 50%, 0.04),
+                inset 0 0 8px hsla(155, 65%, 50%, 0.03);
+    opacity: 0;
+    transform: scale(0.92);
+    transition: opacity 0.5s var(--ease-out),
+                transform 0.6s cubic-bezier(0.23, 1, 0.32, 1),
+                border-color 0.5s var(--ease-out),
+                box-shadow 0.5s var(--ease-out);
+    pointer-events: none;
+  }
+
+  .stack__card:hover .stack__card-ring {
+    opacity: 1;
+    transform: scale(1);
+    border-color: hsla(155, 65%, 50%, 0.35);
+    box-shadow: 0 0 16px hsla(155, 65%, 50%, 0.15),
+                inset 0 0 16px hsla(155, 65%, 50%, 0.08);
+  }
+
+  /* ── Layer 2: Glass overlay (mouse-tracked) ─────────── */
+  .stack__card-glass {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    background: hsla(220, 20%, 10%, 0.75);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--glass-border);
+    border-radius: inherit;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    padding-bottom: var(--space-4);
+    transition: transform 0.35s cubic-bezier(0.23, 1, 0.32, 1),
+                border-color var(--duration-normal) var(--ease-out),
+                box-shadow var(--duration-normal) var(--ease-out);
+
+    /* Cutout revealing the logo beneath — controlled by JS */
+    -webkit-mask-image: radial-gradient(
+      circle 26% at 50% 30%,
+      transparent 94%,
+      black 100%
+    );
+    mask-image: radial-gradient(
+      circle 26% at 50% 30%,
+      transparent 94%,
+      black 100%
+    );
+  }
+
+  .stack__card:hover .stack__card-glass {
+    border-color: var(--accent-green-300);
+    box-shadow: inset 0 0 30px hsla(155, 65%, 50%, 0.06),
+                0 0 20px hsla(155, 65%, 50%, 0.1);
+  }
+
+  /* ── Card info text ─────────────────────────────────── */
+  .stack__card-info {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    text-align: center;
+  }
+
+  .stack__card-name {
+    font-size: var(--text-base);
+    font-weight: var(--weight-semibold);
+    color: var(--text-primary);
+    transition: color var(--duration-normal) var(--ease-out);
+  }
+
+  .stack__card:hover .stack__card-name {
+    color: var(--accent-green-200);
+  }
+
+  .stack__card-category {
+    font-size: var(--text-xs);
+    color: var(--text-muted);
+    text-transform: none;
+    letter-spacing: 0;
+  }
+
+  /* ── Neural connection line style (SVG) ─────────────── */
+  .stack__neural-svg :global(line) {
+    stroke: var(--accent-green-500);
+    stroke-width: 1;
+    opacity: 0;
+    transition: opacity 0.5s ease;
+  }
+
+  .stack__neural-svg.is-visible :global(line) {
+    opacity: 1;
+    animation: neural-pulse 3s ease-in-out infinite alternate;
+  }
+
+  @keyframes neural-pulse {
+    0% { opacity: 0.12; }
+    50% { opacity: 0.3; }
+    100% { opacity: 0.12; }
+  }
+</style>

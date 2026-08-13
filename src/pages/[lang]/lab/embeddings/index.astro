@@ -1,0 +1,271 @@
+---
+import BaseLayout from '../../../../layouts/BaseLayout.astro';
+import EmbeddingApp from '../../../../components/lab/embedding/EmbeddingApp.svelte';
+import LabCopilot from '../../../../components/lab/LabCopilot.svelte';
+import FaqSection from '../../../../components/sections/FaqSection.astro';
+import LabToolsNav from '../../../../components/lab/LabToolsNav.astro';
+import { LAB_FAQ } from '../../../../data/lab-faq';
+import { t } from '../../../../i18n/utils';
+
+export function getStaticPaths() {
+  return [{ params: { lang: 'en' } }, { params: { lang: 'ru' } }];
+}
+
+const { lang } = Astro.params;
+const activeLang = (lang as 'en' | 'ru') || 'en';
+
+const seoData = {
+  en: {
+    title: 'Embedding Space Explorer | VKVstudio Lab',
+    description:
+      'Embed a demo corpus on a self-hosted server with Google EmbeddingGemma, project it into an interactive 3D point cloud, and search it by meaning, not keywords.',
+  },
+  ru: {
+    title: 'Embedding Space Explorer | VKVstudio Лаборатория',
+    description:
+      'Эмбеддинги демо-корпуса на собственном сервере (Google EmbeddingGemma), проекция в интерактивное 3D-облако точек и поиск по смыслу, а не по словам.',
+  },
+};
+
+const meta = seoData[activeLang] || seoData.en;
+
+const homeUrl = `https://vkvstudio.com/${activeLang}/`;
+const toolUrl = `https://vkvstudio.com/${activeLang}/lab/embeddings/`;
+
+const faq = LAB_FAQ.embeddings;
+
+const jsonLd = [
+  // This page needs the visible answers more than the other two: its island is
+  // `client:only` (WebGL + a Web Worker), so before this section a crawler got
+  // a loading spinner and 250 words of side panel.
+  {
+    '@context': 'https://schema.org',
+    '@type': 'FAQPage',
+    mainEntity: faq.items.map((item) => ({
+      '@type': 'Question',
+      name: item.q[activeLang],
+      acceptedAnswer: { '@type': 'Answer', text: item.a[activeLang] },
+    })),
+  },
+  {
+    '@context': 'https://schema.org',
+    '@type': 'SoftwareApplication',
+    name: 'Embedding Space Explorer',
+    applicationCategory: 'DeveloperApplication',
+    operatingSystem: 'Web',
+    url: toolUrl,
+    description: meta.description,
+    featureList:
+      activeLang === 'ru'
+        ? [
+            'Генерация эмбеддингов на сервере через Google EmbeddingGemma',
+            'Снижение размерности с помощью UMAP',
+            'Интерактивный 3D-ландшафт семантических значений',
+            'Живой семантический поиск по демо-корпусу',
+            'Гибридный поиск: dense-эмбеддинги + лексический BM25',
+            'Слияние оценок через Reciprocal Rank Fusion (RRF) или min-max блендинг',
+            'MMR-реранкинг для разнообразия результатов',
+            'Экспериментальный LLM-реранкинг релевантности (self-hosted Gemma как судья)',
+            'Кросс-языковое сравнение сходства EN↔RU',
+            'Векторная арифметика аналогий (king − man + woman ≈ queen)',
+            'Настраиваемые стратегии чанкинга (фиксированный, по предложениям, семантический)',
+            'Matryoshka-усечение эмбеддингов (768/512/256/128 измерений)',
+          ]
+        : [
+            'Server-side embedding generation via Google EmbeddingGemma',
+            'UMAP dimensionality reduction',
+            'Interactive 3D semantic landscape',
+            'Live semantic search over a demo corpus',
+            'Hybrid retrieval: dense embeddings + BM25 lexical search',
+            'Score fusion via Reciprocal Rank Fusion (RRF) or min-max blending',
+            'MMR diversity-aware reranking',
+            'Experimental LLM relevance reranking (self-hosted Gemma as judge)',
+            'Cross-lingual EN↔RU similarity comparison',
+            'Vector analogy arithmetic (king − man + woman ≈ queen)',
+            'Configurable chunking strategies (fixed, sentence, semantic)',
+            'Matryoshka embedding truncation (768/512/256/128 dims)',
+          ],
+    // @id reference, NOT a fresh inline Person. Inlining one here created a
+    // SECOND, anonymous "Valery" node on the same page alongside the
+    // "Valery Karpov" defined in BaseLayout — the exact entity fragmentation
+    // the @id graph exists to prevent. Confirmed by validator.schema.org,
+    // which rendered them as two separate people.
+    // Note also: this SoftwareApplication node is deliberately kept even
+    // though Google's Rich Results Test flags it as missing
+    // aggregateRating/review. Those require real user ratings; inventing them
+    // is spam markup and a manual-action risk. The node stays because AI
+    // answer engines read it, and it is truthful.
+    author: { '@id': 'https://vkvstudio.com/#person' },
+    offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
+  },
+  {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      { '@type': 'ListItem', position: 1, name: t(activeLang, 'nav.home'), item: homeUrl },
+      { '@type': 'ListItem', position: 2, name: t(activeLang, 'nav.lab'), item: `${homeUrl}#lab` },
+      { '@type': 'ListItem', position: 3, name: t(activeLang, 'embeddings.title'), item: toolUrl },
+    ],
+  },
+];
+---
+
+<BaseLayout title={meta.title} description={meta.description} lang={lang} jsonLd={jsonLd}>
+  <main id="main-content" class="lab-page">
+    <header class="lab-header">
+      <div class="container">
+        <a href={`/${activeLang}/`} class="back-link">← {t(activeLang, 'nav.home')}</a>
+        <h1 class="text-h1 text-gradient">{t(activeLang, 'embeddings.title')}</h1>
+        <p class="text-secondary">{t(activeLang, 'embeddings.subtitle')}</p>
+      </div>
+    </header>
+
+    <section class="lab-content">
+      <div class="container">
+        <!--
+          client:only — this island needs WebGL (Three.js) and a Web Worker
+          (UMAP layout refinement), neither of which can run during SSR.
+          Embeddings themselves are computed server-side by the inference
+          backend's EmbeddingGemma (POST /api/embed), not in the browser.
+
+          The slotted markup below is NOT rendered before hydration, whatever it
+          looks like. Astro puts a client:only island's slot inside
+          `<template data-astro-template>` and reads it back out in JS — verified
+          in the built HTML — and a <template> paints nothing. So the island
+          occupied zero height, the FAQ below it sat ~676 px too high, and
+          everything from here down was shoved into place the moment the bundle
+          landed. Lighthouse measured CLS 0.206 on mobile and 0.142 on desktop,
+          almost all of it attributed to #embeddings-faq.
+
+          Hence this wrapper, which is ordinary markup and therefore actually
+          exists at first paint. Its min-height reserves what the app turns out
+          to occupy, so nothing below it moves. The numbers are measured rather
+          than derived — the app's own scene panel is 560 px desktop / 340 px
+          below 767 px (styles/lab/embeddings.css), and the rest is tabs and
+          controls. Keep this breakpoint in step with that one.
+        -->
+        <div class="embeddings-island-slot">
+        <EmbeddingApp lang={activeLang} client:only="svelte">
+          <div class="embeddings-loading-fallback" role="status" aria-live="polite">
+            <span class="embeddings-loading-fallback__spinner" aria-hidden="true"></span>
+            <p>{t(activeLang, 'embeddings.statusLoadingModel')}</p>
+          </div>
+        </EmbeddingApp>
+        </div>
+      </div>
+    </section>
+
+    <FaqSection
+      lang={activeLang}
+      items={faq.items}
+      heading={faq.heading[activeLang]}
+      id="embeddings-faq"
+    />
+
+    <LabToolsNav lang={activeLang} current="embeddings" />
+
+    <LabCopilot tool="embeddings" lang={activeLang} client:idle />
+  </main>
+</BaseLayout>
+
+<style>
+  .lab-page {
+    padding-top: var(--space-32);
+    min-height: 100vh;
+    background: var(--bg-obsidian);
+  }
+
+  .lab-header {
+    text-align: center;
+    margin-bottom: var(--space-12);
+  }
+
+  .lab-header .container {
+    max-width: var(--container-narrow);
+    margin: 0 auto;
+    padding: 0 var(--space-4);
+  }
+
+  .lab-header h1 {
+    margin-bottom: var(--space-4);
+  }
+
+  .lab-content .container {
+    max-width: var(--container-max);
+    margin: 0 auto;
+    padding: 0 var(--space-4) var(--space-24);
+  }
+
+  .back-link {
+    color: var(--text-muted);
+    text-decoration: none;
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    text-transform: uppercase;
+    letter-spacing: var(--tracking-wide);
+    transition: var(--transition-colors);
+    margin-bottom: var(--space-2);
+    /* WCAG 2.2 SC 2.5.8: the text alone renders ~20px tall, under the 24px
+       minimum target size. inline-flex + min-height grows the hit area
+       without moving the label. */
+    display: inline-flex;
+    align-items: center;
+    min-height: 24px;
+  }
+
+  .back-link:hover {
+    color: var(--accent-green-300);
+  }
+
+  /* Holds the space a client:only island cannot hold for itself. See the
+     comment on the element: the slot Astro renders for client:only lives inside
+     an inert <template>, so without this the whole page below the tool jumped
+     once the bundle arrived. Sized from what the app actually occupies, not
+     from a guess — adjust by measuring, not by eyeballing. */
+  .embeddings-island-slot {
+    min-height: 676px;
+  }
+
+  @media (min-width: 768px) {
+    .embeddings-island-slot {
+      min-height: 900px;
+    }
+  }
+
+  /* Pre-hydration / no-JS placeholder — keeps the page from showing a blank
+     gap while the client:only island's JS bundle loads. NOTE: this only ever
+     applies once the island has hydrated and re-inserted the slot; before that
+     it is markup inside a <template> and paints nothing. */
+  .embeddings-loading-fallback {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-4);
+    min-height: 50vh;
+    text-align: center;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+  }
+
+  .embeddings-loading-fallback__spinner {
+    width: 28px;
+    height: 28px;
+    border: 3px solid var(--border-default);
+    border-right-color: var(--accent-green-300);
+    border-radius: 50%;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .embeddings-loading-fallback__spinner {
+      animation: embeddings-fallback-spin 800ms linear infinite;
+    }
+  }
+
+  @keyframes embeddings-fallback-spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+</style>

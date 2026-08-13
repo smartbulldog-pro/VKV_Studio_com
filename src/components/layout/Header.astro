@@ -1,0 +1,173 @@
+---
+/**
+ * Header — Phase 1.7 Navigation Revolution
+ *
+ * CHANGES from original:
+ * - Removed: all text nav links (HOME/LAB/STACK/ABOUT/CONTACT)
+ * - Removed: language switcher (moved to footer)
+ * - Removed: hamburger menu (replaced by ConstellationNav overlay)
+ * - Added: MenuPill (three neuron dots) — appears at scroll 40%, opens ConstellationNav
+ * - Logo slot is now empty (VKVLogo.svelte handles its own positioning)
+ *
+ * ConstellationNav is rendered in index.astro (not here) to avoid
+ * Svelte island import issues inside layout .astro files.
+ */
+import type { Lang } from '@i18n/utils';
+
+interface Props {
+  lang: Lang;
+}
+
+// lang is kept in Props for potential future use (localized aria-labels)
+const { lang } = Astro.props;
+---
+
+{/* MenuPill — three neuron dots, fixed top-right */}
+<button
+  class="menu-pill"
+  id="menu-pill-btn"
+  aria-label={lang === 'ru' ? 'Открыть меню навигации' : 'Open navigation menu'}
+  aria-expanded="false"
+  aria-controls="constellation-nav-overlay"
+>
+  <span class="menu-dot"></span>
+  <span class="menu-dot"></span>
+  <span class="menu-dot"></span>
+</button>
+
+<style>
+  /* ── Menu Pill ─────────────────────────────────────────────── */
+  .menu-pill {
+    position: fixed;
+    top: 16px;
+    right: 16px;
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    padding: 10px 16px;
+    background: hsla(220, 25%, 8%, 0.7);
+    border: 1px solid hsla(185, 60%, 50%, 0.12);
+    border-radius: 320px;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    cursor: pointer;
+    z-index: 100;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.4s ease,
+                border-color var(--duration-normal) var(--ease-out),
+                box-shadow var(--duration-normal) var(--ease-out);
+    min-height: 44px; /* touch target */
+  }
+
+  .menu-pill.visible {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .menu-pill:hover {
+    border-color: hsla(185, 60%, 50%, 0.3);
+    box-shadow: 0 0 20px hsla(185, 60%, 50%, 0.15);
+  }
+
+  .menu-dot {
+    display: block;
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: hsla(185, 60%, 60%, 0.6);
+    transition: all var(--duration-normal) var(--ease-out);
+  }
+
+  .menu-pill:hover .menu-dot {
+    background: hsla(185, 60%, 60%, 1);
+    box-shadow: 0 0 8px hsla(185, 60%, 60%, 0.5);
+  }
+
+  /* Pulsing dots when overlay is open */
+  .menu-pill[aria-expanded="true"] .menu-dot {
+    background: hsl(185, 80%, 60%);
+    box-shadow: 0 0 12px hsla(185, 80%, 60%, 0.6);
+    animation: dot-pulse 1.2s ease-in-out infinite;
+  }
+
+  .menu-pill[aria-expanded="true"] .menu-dot:nth-child(2) {
+    animation-delay: 0.2s;
+  }
+
+  .menu-pill[aria-expanded="true"] .menu-dot:nth-child(3) {
+    animation-delay: 0.4s;
+  }
+
+  @keyframes dot-pulse {
+    0%, 100% { transform: scale(1); opacity: 1; }
+    50%       { transform: scale(1.4); opacity: 0.7; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .menu-pill[aria-expanded="true"] .menu-dot {
+      animation: none;
+    }
+    .menu-pill {
+      transition: opacity 0.1s, border-color 0.1s;
+    }
+  }
+
+  /* ConstellationNav wrapper */
+  #constellation-nav-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 200;
+    pointer-events: none;
+  }
+
+  /* ── Mobile: larger touch target ───────────────────────────── */
+  @media (max-width: 767px) {
+    .menu-pill {
+      padding: 12px 18px;
+    }
+    .menu-dot {
+      width: 5px;
+      height: 5px;
+    }
+  }
+</style>
+
+<script>
+  /**
+   * MenuPill scroll visibility + ConstellationNav toggle
+   * Visible from Career Arc (#about) onwards — hidden during hero
+   */
+
+  const menuPill = document.getElementById('menu-pill-btn');
+  const aboutEl = document.getElementById('about');
+
+  // Show pill only when #about section top has entered the viewport
+  function updatePillVisibility(): void {
+    if (!menuPill || !aboutEl) return;
+    const aboutTop = aboutEl.getBoundingClientRect().top;
+    if (aboutTop < window.innerHeight) {
+      menuPill.classList.add('visible');
+    } else {
+      menuPill.classList.remove('visible');
+    }
+  }
+
+  window.addEventListener('scroll', updatePillVisibility, { passive: true });
+  updatePillVisibility();
+
+  // ── Toggle ConstellationNav ──────────────────────────────────
+  // The ConstellationNav Svelte component listens to a custom event
+  menuPill?.addEventListener('click', () => {
+    const isExpanded = menuPill.getAttribute('aria-expanded') === 'true';
+    const newState = !isExpanded;
+    menuPill.setAttribute('aria-expanded', String(newState));
+    // Dispatch event for ConstellationNav to pick up
+    window.dispatchEvent(new CustomEvent('vkv:constellation-toggle', { detail: { open: newState } }));
+  });
+
+  // Listen for ConstellationNav close events (ESC, click outside, etc.)
+  window.addEventListener('vkv:constellation-close', () => {
+    menuPill?.setAttribute('aria-expanded', 'false');
+  });
+</script>

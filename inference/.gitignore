@@ -1,0 +1,31 @@
+# ── Secrets: NEVER commit service-account keys / credentials ─────────────────
+# The Google TTS key must live OUTSIDE the repo (point SYNAPSE_GOOGLE_TTS_CREDENTIALS
+# at an external path). These rules are a safety net in case one lands under inference/.
+*.sa.json
+service-account*.json
+*service-account*.json
+*-credentials.json
+*credentials*.json
+gcp-*.json
+.secrets/
+secrets/
+*.pem
+*.key
+
+# TTS monthly char-budget counter (runtime state, machine-local)
+tts_char_budget.json
+
+# Local SQLite chat store (runtime state)
+synapse_chats.db
+synapse_chats.db-*
+
+# ── Model weights — large third-party binaries, live locally only ────────────
+# (The repo's stated policy is that models are gitignored. Whisper .bin + the dead
+#  XTTS .pth weights were tracked historically — new adds are blocked here; removing
+#  the existing blobs from history is a destructive git filter-repo → OWNER.)
+models/
+*.bin
+*.pth
+*.pt
+*.gguf
+*.onnx

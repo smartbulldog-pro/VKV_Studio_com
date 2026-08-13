@@ -1,0 +1,132 @@
+---
+/**
+ * Cross-links between the three Lab tools.
+ *
+ * Before this, every Lab page linked only back to the home page, so the three
+ * most substantial pages on the site formed no cluster at all: to get from the
+ * tokenizer to the embedding explorer you had to go home and start again, and a
+ * crawler arriving at one tool found no path to the other two. Both problems
+ * have the same one-line fix.
+ *
+ * `current` is excluded rather than rendered as a disabled item — a link to the
+ * page you are already on is noise for a reader and a self-reference for a
+ * crawler.
+ */
+import type { Lang } from '@i18n/utils';
+import { t } from '@i18n/utils';
+import type { LabTool } from '@/lib/lab-copilot-content';
+
+interface Props {
+  lang: Lang;
+  current: LabTool;
+}
+const { lang, current } = Astro.props;
+
+const TOOLS: { id: LabTool; href: string; titleKey: string; subtitleKey: string }[] = [
+  {
+    id: 'tokenizer',
+    href: 'lab/tokenizer',
+    titleKey: 'tokenizer.title',
+    subtitleKey: 'tokenizer.subtitle',
+  },
+  { id: 'prompt', href: 'lab/prompt', titleKey: 'prompt.title', subtitleKey: 'prompt.subtitle' },
+  {
+    id: 'embeddings',
+    href: 'lab/embeddings',
+    titleKey: 'embeddings.title',
+    subtitleKey: 'embeddings.subtitle',
+  },
+];
+
+const others = TOOLS.filter((tool) => tool.id !== current);
+---
+
+<nav class="lab-nav" aria-label={t(lang, 'nav.lab')}>
+  <div class="container">
+    <p class="lab-nav__eyebrow text-mono">{t(lang, 'nav.lab')}</p>
+    <ul class="lab-nav__list">
+      {
+        others.map((tool) => (
+          <li>
+            <a class="lab-nav__card" href={`/${lang}/${tool.href}/`}>
+              <span class="lab-nav__title">{t(lang, tool.titleKey)}</span>
+              <span class="lab-nav__subtitle">{t(lang, tool.subtitleKey)}</span>
+            </a>
+          </li>
+        ))
+      }
+    </ul>
+  </div>
+</nav>
+
+<style>
+  .lab-nav {
+    padding: 0 0 var(--space-24);
+    background: var(--bg-obsidian);
+  }
+
+  .lab-nav .container {
+    max-width: var(--container-narrow);
+    margin: 0 auto;
+    padding: 0 var(--space-4);
+  }
+
+  .lab-nav__eyebrow {
+    color: var(--accent-green-300);
+    font-size: var(--text-sm);
+    letter-spacing: var(--tracking-widest);
+    text-transform: uppercase;
+    margin-bottom: var(--space-4);
+  }
+
+  .lab-nav__list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    /* Two cards on a wide screen, stacked below ~640px without a media query. */
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
+    gap: var(--space-4);
+  }
+
+  .lab-nav__card {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    height: 100%;
+    padding: var(--space-5);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-lg);
+    text-decoration: none;
+    color: var(--text-primary);
+  }
+
+  .lab-nav__card:hover {
+    border-color: var(--accent-green-300);
+  }
+
+  .lab-nav__card:focus-visible {
+    outline: 2px solid var(--accent-green-300);
+    outline-offset: 4px;
+  }
+
+  .lab-nav__title {
+    font-size: var(--text-lg);
+    font-weight: var(--weight-medium);
+    line-height: var(--leading-snug);
+  }
+
+  .lab-nav__subtitle {
+    color: var(--text-secondary);
+    font-size: var(--text-sm);
+    line-height: var(--leading-relaxed);
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .lab-nav__card {
+      transition:
+        border-color var(--duration-normal) var(--ease-out),
+        color var(--duration-normal) var(--ease-out);
+    }
+  }
+</style>

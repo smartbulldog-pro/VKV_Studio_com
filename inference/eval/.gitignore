@@ -1,0 +1,7 @@
+# Local WER eval artifacts — audio clips and the working manifest stay local.
+# Commit only manifest.example.json, the harness code, and references.
+clips/
+*.wav
+*.mp3
+manifest.json
+runs/
