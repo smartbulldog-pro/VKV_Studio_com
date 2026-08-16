@@ -177,8 +177,8 @@ describe('reciprocalRankFusion', () => {
     // item1 and item2 are symmetric (one wins each list at rank 1, loses the
     // other at rank 3) so they fuse to an identical score, both beating the
     // "consistently mediocre" item0.
-    expect(fused[1]).toBeCloseTo(fused[2]);
-    expect(fused[1]).toBeGreaterThan(fused[0]);
+    expect(fused[1]).toBeCloseTo(fused[2]!);
+    expect(fused[1]).toBeGreaterThan(fused[0]!);
   });
 
   it('reproduces a consensus ranking item-for-item when both lists agree exactly', () => {

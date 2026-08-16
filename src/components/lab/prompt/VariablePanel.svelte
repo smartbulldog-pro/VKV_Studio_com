@@ -234,7 +234,7 @@
     width: 100%;
   }
 
-  .var-item__input:focus {
+  .var-item__input:focus-visible {
     border-color: hsl(190, 80%, 50%);
     box-shadow: 0 0 0 3px hsla(190, 80%, 50%, 0.1);
   }

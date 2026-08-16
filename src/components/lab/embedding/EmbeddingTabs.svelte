@@ -61,7 +61,7 @@
       role="tab"
       type="button"
       aria-selected={activeTab === id}
-      aria-controls="embeddings-panel-{id}"
+      aria-controls={activeTab === id ? `embeddings-panel-${id}` : undefined}
       tabindex={activeTab === id ? 0 : -1}
       onclick={() => onchange(id)}
       onkeydown={(e) => handleKeydown(e, id)}

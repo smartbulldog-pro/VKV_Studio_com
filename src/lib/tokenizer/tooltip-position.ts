@@ -65,9 +65,37 @@ export function placeTooltip(
   return { x, y };
 }
 
-/** Pulls the client coordinates out of either pointer event shape. */
-export function pointerXY(e: MouseEvent | TouchEvent): TooltipPoint {
-  if ('clientX' in e) return { x: e.clientX, y: e.clientY };
-  const touch = e.touches[0];
-  return { x: touch?.clientX ?? 0, y: touch?.clientY ?? 0 };
+/**
+ * Pulls client coordinates out of whichever event shape arrived.
+ *
+ * Keyboard events are the third shape and they used to crash here. Every token
+ * is `role="button"` with `tabindex="0"` and an `onkeydown` handler — the tool
+ * advertises keyboard operation — and pressing Enter on one threw
+ * `Cannot read properties of undefined (reading '0')`, because a KeyboardEvent
+ * has neither `clientX` nor `touches` and the touch branch indexed an undefined
+ * list. So the one interaction path a keyboard user has was the one that failed,
+ * loudly, in the console of the flagship Lab page.
+ *
+ * A keyboard event has no pointer, but it does have a target, and the element's
+ * own box is exactly where the tooltip should appear. That also happens to be
+ * the better answer for a mouse user whose event somehow lacks coordinates.
+ */
+export function pointerXY(e: MouseEvent | TouchEvent | KeyboardEvent): TooltipPoint {
+  if ('clientX' in e && typeof e.clientX === 'number') {
+    return { x: e.clientX, y: e.clientY };
+  }
+  const touch = 'touches' in e ? e.touches[0] : undefined;
+  if (touch) return { x: touch.clientX, y: touch.clientY };
+
+  // Duck-typed rather than `instanceof Element`: this module is imported by the
+  // unit tests under the node environment, where `Element` is not a global at
+  // all, so the instanceof would throw ReferenceError instead of returning a
+  // fallback. Asking whether the thing can measure itself is the question we
+  // actually have, and it holds in the browser, in node and during SSR alike.
+  const target = (e.currentTarget ?? e.target) as { getBoundingClientRect?: () => DOMRect } | null;
+  if (target && typeof target.getBoundingClientRect === 'function') {
+    const r = target.getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top };
+  }
+  return { x: 0, y: 0 };
 }

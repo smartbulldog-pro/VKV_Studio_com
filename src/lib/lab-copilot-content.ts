@@ -38,7 +38,7 @@ export const COPILOT_CONTENT: Record<LabTool, Record<Lang, CopilotGuide>> = {
         'See exactly how a model splits your text into tokens — and what that split costs in budget and context.',
       actions: [
         'Paste real text or a code snippet and watch the live token count.',
-        'Switch the model to compare how GPT-5.5, Gemini, Claude, and Llama tokenize the same text.',
+        'Switch the model to compare how GPT, Gemini, Claude, and Llama tokenize the same text.',
         'Toggle “as chat message” to reveal the hidden chat-template overhead you also pay for.',
       ],
       tips: [
@@ -58,7 +58,7 @@ export const COPILOT_CONTENT: Record<LabTool, Record<Lang, CopilotGuide>> = {
         'Посмотри, как именно модель режет твой текст на токены — и во что это обходится по бюджету и контексту.',
       actions: [
         'Вставь реальный текст или кусок кода и смотри счётчик токенов в реальном времени.',
-        'Переключай модель, чтобы сравнить, как GPT-5.5, Gemini, Claude и Llama токенизируют один текст.',
+        'Переключай модель, чтобы сравнить, как GPT, Gemini, Claude и Llama токенизируют один текст.',
         'Включи режим «как чат-сообщение», чтобы увидеть скрытый overhead чат-шаблона, за который тоже платишь.',
       ],
       tips: [

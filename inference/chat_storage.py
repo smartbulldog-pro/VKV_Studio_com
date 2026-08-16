@@ -225,7 +225,14 @@ class ChatStorage:
                         """,
                         [
                             (
-                                m.get("id", f"{conv_id}-{i}"),
+                                # `or`, not a default: ConversationMessageItem.id
+                                # defaults to "" so the key is ALWAYS present, which
+                                # made `m.get("id", fallback)` dead — a blank id then
+                                # squatted the GLOBAL `messages.id` primary key and an
+                                # IntegrityError blocked every other owner's save of an
+                                # id-less message. `or` sends "" to the per-conversation
+                                # fallback instead.
+                                (m.get("id") or f"{conv_id}-{i}"),
                                 conv_id,
                                 m["role"],
                                 m["content"],

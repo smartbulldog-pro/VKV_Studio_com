@@ -800,7 +800,12 @@
     <div class="embedding-scene__hint">{t(lang, 'embeddings.hoverHint')}</div>
   {:else}
     <div class="embedding-scene__fallback">
-      <div class="embedding-scene__fallback-canvas-host" bind:this={hostEl}></div>
+      <div
+        class="embedding-scene__fallback-canvas-host"
+        bind:this={hostEl}
+        role="img"
+        aria-label={t(lang, 'embeddings.viewerHeader')}
+      ></div>
       <p class="embedding-scene__fallback-notice">
         {#if fallbackReason === 'no-webgl'}
           {t(lang, 'embeddings.fallbackNoWebglNotice')}

@@ -26,7 +26,11 @@ const PAGE_SOURCES = {
   '/privacy/': 'src/pages/[lang]/privacy/index.astro',
 };
 
-/** ISO commit date of the newest commit touching `file`, or null. */
+/**
+ * ISO commit date of the newest commit touching `file`, or null.
+ * @param {string} file
+ * @returns {string | null}
+ */
 function lastCommitISO(file) {
   try {
     const out = execFileSync('git', ['log', '-1', '--format=%cI', '--', file], {
@@ -70,6 +74,16 @@ export default defineConfig({
       serialize(item) {
         const route = new URL(item.url).pathname.replace(/^\/(en|ru)/, '') || '/';
         const lastmod = LASTMOD[route];
+        // @astrojs/sitemap emits only en+ru <xhtml:link> alternates, never x-default,
+        // which disagrees with every page's <head> (en+ru+x-default). Conflicting
+        // hreflang channels are a documented error, so mirror the head here: add an
+        // x-default pointing at the en alternate (== BaseLayout's xDefaultUrl).
+        if (item.links) {
+          const enLink = item.links.find((l) => l.lang === 'en');
+          if (enLink && !item.links.some((l) => l.lang === 'x-default')) {
+            item.links = [...item.links, { lang: 'x-default', url: enLink.url }];
+          }
+        }
         return lastmod ? { ...item, lastmod } : item;
       },
     }),

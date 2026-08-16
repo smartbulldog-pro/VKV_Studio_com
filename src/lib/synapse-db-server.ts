@@ -54,15 +54,45 @@ interface ServerConversation {
  * Push a conversation + messages to the server.
  * Fire-and-forget: errors are silently logged.
  */
+/**
+ * Must match `ConversationSaveRequest.messages` max_length in inference/main.py.
+ *
+ * The client sent the whole conversation and the server rejects anything past
+ * this with a 422, which the old `.catch(() => {})` swallowed — so a chat that
+ * crossed 100 messages silently stopped being backed up, forever, while the UI
+ * showed nothing at all. Sending the most recent 100 keeps the server copy a
+ * rolling window of the live conversation instead of a snapshot frozen at the
+ * moment it got too long. IndexedDB still holds every message; the server copy
+ * is the cross-device mirror, and a recent mirror beats a stale complete one.
+ *
+ * The better fix is raising the bound on both sides at once. Doing that means
+ * a backend deploy, so it has to be a matched pair, not a client-side edit.
+ */
+const SERVER_MAX_MESSAGES = 100;
+
+/** Logged once per session — a sync that quietly gives up is the thing being fixed. */
+let warnedAboutTruncation = false;
+
 export function pushToServer(conv: Conversation, messages: StoredMessage[]): void {
   const headers = authHeaders({ 'Content-Type': 'application/json' });
   if (!headers) return; // anonymous → local-only, nothing to sync
+
+  const sent = messages.slice(-SERVER_MAX_MESSAGES);
+  if (sent.length < messages.length && !warnedAboutTruncation) {
+    warnedAboutTruncation = true;
+    console.warn(
+      `[synapse-sync] Conversation has ${messages.length} messages; the server accepts ` +
+        `${SERVER_MAX_MESSAGES}. Syncing the most recent ${SERVER_MAX_MESSAGES}. ` +
+        `Nothing is lost locally.`
+    );
+  }
+
   const payload: ServerConversation = {
     id: conv.id,
     title: conv.title,
     createdAt: conv.createdAt,
     updatedAt: conv.updatedAt,
-    messages: messages.map((m) => ({
+    messages: sent.map((m) => ({
       id: m.msgId,
       role: m.role,
       content: m.content,
@@ -79,7 +109,15 @@ export function pushToServer(conv: Conversation, messages: StoredMessage[]): voi
     body: JSON.stringify(payload),
     signal: ctrl.signal,
   })
-    .catch(() => {}) // silently ignore
+    .then((res) => {
+      // A rejected sync used to be indistinguishable from a successful one.
+      // Still non-fatal — IndexedDB is the source of truth and the next message
+      // retries — but it should not be invisible while it happens.
+      if (!res.ok) {
+        console.warn(`[synapse-sync] Server refused the conversation upsert: HTTP ${res.status}`);
+      }
+    })
+    .catch(() => {}) // network/abort — the next message retries
     .finally(() => clearTimeout(timer));
 }
 

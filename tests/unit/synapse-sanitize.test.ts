@@ -61,4 +61,39 @@ describe('sanitizeResponse — XSS battery', () => {
     const text = 'Lighthouse 100 is our baseline, not the goal.';
     expect(sanitizeResponse(text)).toBe(text);
   });
+
+  // ── Comment-splice mutation: the gap the battery above did NOT cover ────────
+  // The cases above nest TAGS (`<<script>script>`), which the original
+  // fixed-point tag loop already collapsed. The real hole was a dangerous token
+  // reconstructed by a LATER stage: removing an HTML comment splices its
+  // neighbours together, and only the tag stage looped, so the splice was never
+  // re-scanned. Twelve of these were fed to the staged version and ten came out
+  // live. Each is pinned so the staged structure cannot return.
+  const splicePayloads = [
+    '<<!-- -->script>alert(1)<<!-- -->/script>',
+    '<<![CDATA[x]]>script>alert(1)<<![CDATA[x]]>/script>',
+    '<<!-- -->img src=x o<!--y-->nerror=alert(1)>',
+    '<<!-- -->svg o<!--y-->nload=alert(1)>',
+    '<<!-- -->a href="java<!--y-->script:alert(1)">x</a>',
+    '<<!-- -->iframe src=x>',
+    '<<!--<!-- -->-->script>alert(1)</script>',
+    '<scr<!-- -->ipt>alert(1)</scr<!-- -->ipt>',
+    'javajavascript:script:alert(1)', // \b once made this match nothing
+    'o<!--a-->n<!--b-->error=alert(1)',
+  ];
+  for (const p of splicePayloads) {
+    it(`comment-splice leaves nothing live: ${p.slice(0, 32)}`, () => {
+      const out = sanitizeResponse(p);
+      expect(out, `tag survived: ${out}`).not.toMatch(/<\/?[a-zA-Z]/);
+      expect(out, `handler survived: ${out}`).not.toMatch(/\bon[a-zA-Z]{2,20}\s*=/i);
+      expect(out, `scheme survived: ${out}`).not.toMatch(/(?:javascript|vbscript)\s*:/i);
+    });
+  }
+
+  it('is idempotent: a second pass finds nothing the first missed', () => {
+    for (const p of splicePayloads) {
+      const once = sanitizeResponse(p);
+      expect(sanitizeResponse(once)).toBe(once);
+    }
+  });
 });

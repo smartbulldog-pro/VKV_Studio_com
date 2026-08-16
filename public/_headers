@@ -81,6 +81,39 @@
   # hstspreload.org (verified 2026-08-09: status "unknown"), so the token
   # asserted something untrue. Dropped rather than left as decoration.
   # Submitting is also a one-way door — with includeSubDomains it would pin
-  # api.vkvstudio.com to HTTPS-only before that host even exists. Revisit once
-  # the API is live and stable.
+  # api.vkvstudio.com to HTTPS-only before that host even exists.
+  # UPDATE 2026-08-15: api.vkvstudio.com has been live since 13 August, and
+  # includeSubDomains above already pins it for anyone who has visited the apex.
+  # What is still missing is on the ZONE, not here: api.* answers plain HTTP with
+  # real JSON and sends no HSTS of its own, because the apex's 301 comes from
+  # Pages and the tunnelled host never inherits it. Turn on "Always Use HTTPS"
+  # and HSTS at the Cloudflare zone; preload submission can follow once that is
+  # true for every host under the domain.
   Strict-Transport-Security: max-age=31536000; includeSubDomains
+
+# Content-hashed build output. Pages' default for these is
+# `public, max-age=14400, must-revalidate` — four hours, then a revalidation
+# round-trip for a file whose name changes whenever its bytes do. The hash IS
+# the cache key, so a year and `immutable` cost nothing and remove the
+# conditional request entirely. Lighthouse flags the default as an inefficient
+# cache policy, and on a site that treats 100 as the baseline that is a free
+# point.
+#
+# This block sits AFTER /* on purpose: Cloudflare Pages does not pick the most
+# specific rule, it applies every matching block in order, so a later block is
+# what wins. Deliberately scoped to /_astro/* — the videos, icons and fonts in
+# public/ keep their plain names across rebuilds and must NOT be immutable.
+/_astro/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# The self-hosted fonts carry stable, non-hashed names (inter-latin.woff2, …),
+# so they cannot be `immutable` the way /_astro can — a rebuild reuses the name.
+# But Pages' 4-hour must-revalidate default costs a returning visitor a
+# conditional request on every preloaded font, and a font that changes gets a
+# new @font-face `src` in the hashed CSS anyway, so 30 days is safe and removes
+# the revalidation. Same reasoning for the videos and the PWA icons below them:
+# plain names, rarely changed, and a change ships new markup that points at it.
+/fonts/*
+  Cache-Control: public, max-age=2592000
+/*.mp4
+  Cache-Control: public, max-age=2592000

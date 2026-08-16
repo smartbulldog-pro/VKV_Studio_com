@@ -129,6 +129,19 @@
     color-scheme: dark;
   }
 
+  /* Google's own wrapper paints a light background behind the pill, which on
+     this dark sidebar reads as a white card floating around the button. Its
+     markup is obfuscated and versioned, so targeting those class names would
+     be a fix with an expiry date. Clipping the host to the same pill radius
+     hides the wrapper wherever it extends past the button, and keeps working
+     whatever Google renders inside next. `width: fit-content` is what makes
+     the clip hug the button rather than the full sidebar column. */
+  .account__gbtn :global(> div) {
+    border-radius: var(--radius-full, 999px);
+    overflow: hidden;
+    width: fit-content;
+  }
+
   .account__sub {
     margin: 0;
     font-family: 'JetBrains Mono', monospace;

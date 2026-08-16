@@ -15,6 +15,7 @@ export type ModelId =
   | 'gemini-3.1-pro'
   | 'gemini-3.5-flash'
   | 'gemini-3.6-flash'
+  | 'gemini-3.7-flash'
   | 'gemma-4-e2b'
   | 'claude-fable-5'
   | 'claude-opus-4.8'
@@ -24,8 +25,13 @@ export type ModelId =
   | 'gpt-5.6-sol'
   | 'gpt-5.6-terra'
   | 'gpt-5.6-luna'
-  | 'gpt-5.5'
-  | 'gpt-5.5-pro'
+  // 'gpt-5.5' / 'gpt-5.5-pro' were removed 2026-08-15 with their MODELS entries
+  // and their builder.ts price rows — OpenAI publishes neither id any more. They
+  // lingered in this union by a missed edit, and because `astro build` does not
+  // type-check, nothing caught the mismatch: MODELS no longer had those keys,
+  // so `Record<ModelId, ModelInfo>` was unsatisfiable and MODELS[id] could have
+  // been undefined at runtime for an id the union still advertised. `tsc
+  // --noEmit` is what found it.
   | 'deepseek-v4-pro'
   | 'deepseek-v4-flash'
   | 'qwen-3.7-max'
@@ -275,22 +281,14 @@ export const MODELS: Record<ModelId, ModelInfo> = {
     hiddenReasoning: true,
     backend: { type: 'tiktoken', encoding: 'o200k_base' },
   },
-  'gpt-5.5': {
-    id: 'gpt-5.5',
-    name: 'GPT-5.5',
-    vocabSize: 201088,
-    hiddenReasoning: true,
-    backend: { type: 'tiktoken', encoding: 'o200k_base' },
-  },
-  // Verified live via openrouter.ai/api/v1/models 2026-07-09: openai/gpt-5.5-pro,
-  // $30/$180 per 1M, 1,050,000 ctx, same o200k_base tokenizer family as gpt-5.5.
-  'gpt-5.5-pro': {
-    id: 'gpt-5.5-pro',
-    name: 'GPT-5.5 Pro',
-    vocabSize: 201088,
-    hiddenReasoning: true,
-    backend: { type: 'tiktoken', encoding: 'o200k_base' },
-  },
+  // 'gpt-5.5' and 'gpt-5.5-pro' were removed 2026-08-15 alongside their price
+  // rows in prompt/builder.ts. OpenAI publishes neither id any longer: a raw
+  // grep of developers.openai.com/api/docs/pricing and .../docs/models returns
+  // ZERO hits for "gpt-5.5" in any spelling, against 17 for "gpt-5.6". Keeping
+  // a tokenizer entry for a model the Prompt Architect can no longer price would
+  // put the two rosters back out of step, which model-roster.test.ts exists to
+  // catch. Checked by grepping the fetched HTML, not by asking a summariser —
+  // that route invented GPT-5.5 rows twice in one afternoon.
 
   // Открытые модели — @huggingface/transformers (lazy-load)
   // Synapse's local base model is Gemma 4 E2B — id/name/repo must all agree;
@@ -455,10 +453,21 @@ export const MODELS: Record<ModelId, ModelInfo> = {
   },
   // The second half of the roster drift described on 'claude-opus-5' above.
   // Source: ai.google.dev/gemini-api/docs/pricing, added to builder.ts
-  // 2026-08-09 at $1.50/$7.50 per 1M with a 1,048,576-token window.
+  // 2026-08-09 (at a price that was double the real one — see that row).
   'gemini-3.6-flash': {
     id: 'gemini-3.6-flash',
     name: 'Gemini 3.6 Flash',
+    vocabSize: 262144,
+    hiddenReasoning: true,
+    backend: { type: 'api', provider: 'google' },
+  },
+  // Added 2026-08-15, in the same commit as its builder.ts row — the roster
+  // join test in tests/unit/model-roster.test.ts fails the build if these two
+  // files disagree, which is how the earlier drift was caught and how this
+  // entry came to exist at the same moment as its price.
+  'gemini-3.7-flash': {
+    id: 'gemini-3.7-flash',
+    name: 'Gemini 3.7 Flash',
     vocabSize: 262144,
     hiddenReasoning: true,
     backend: { type: 'api', provider: 'google' },
@@ -473,6 +482,13 @@ export function getModelInfo(model: ModelId): ModelInfo {
 }
 
 const HUES = [155, 220, 40, 300, 0, 280]; // Green, Blue, Yellow, Magenta, Red, Purple
+
+// HUES is a non-empty constant palette, so `index % HUES.length` is always in
+// range; the assertion documents that guarantee, which noUncheckedIndexedAccess
+// cannot infer (it widens every indexed read to `T | undefined`).
+function hueFor(index: number): number {
+  return HUES[index % HUES.length] as number;
+}
 
 /**
  * Hard cap on tokenizer textarea input length. Without one, pasting ~4MB of
@@ -570,8 +586,7 @@ async function tokenizeWithTiktoken(
   const tokens: Token[] = [];
   const textEncoder = new TextEncoder();
 
-  for (let i = 0; i < tokenIds.length; i++) {
-    const id = tokenIds[i];
+  for (const [i, id] of tokenIds.entries()) {
     const tokenText = encoder.decode([id]);
     const partial = isPartialByteSequence(tokenText);
     // When partial, re-encoding the U+FFFD-laden decode would produce bytes
@@ -582,7 +597,7 @@ async function tokenizeWithTiktoken(
     tokens.push({
       id,
       text: tokenText,
-      hue: HUES[i % HUES.length],
+      hue: hueFor(i),
       bytes: rawBytes,
       partial,
     });
@@ -698,7 +713,7 @@ async function tokenizeWithTransformers(
       // Same honesty rule as the tiktoken path: a partial multibyte decode
       // means re-encoding it would fabricate bytes, not report real ones.
       const rawBytes = partial ? [] : Array.from(textEncoder.encode(tokenText));
-      return { id, text: tokenText, hue: HUES[i % HUES.length], bytes: rawBytes, partial };
+      return { id, text: tokenText, hue: hueFor(i), bytes: rawBytes, partial };
     });
 
     const timeMs = performance.now() - startTime;

@@ -183,6 +183,13 @@ EMBED_NATIVE_DIMS = 768
 # Per-request guards for the public /api/embed endpoint (anti-abuse).
 EMBED_MAX_TEXTS = int(os.getenv("SYNAPSE_EMBED_MAX_TEXTS", "256"))
 EMBED_MAX_CHARS = int(os.getenv("SYNAPSE_EMBED_MAX_CHARS", "4000"))  # per text
+# Ceiling on the WHOLE batch, because the per-text cap bounds nothing that matters:
+# 256 texts x 4000 chars is a legal request worth ~40-60 s of a 4-core box, held
+# while occupying one of only two inference slots. Two of them park the assistant
+# for everyone. The Explorer's real traffic is one short query per debounced
+# keystroke, or a paste of a few thousand characters — this is far above anything
+# the UI can produce and far below anything that hurts.
+EMBED_MAX_TOTAL_CHARS = int(os.getenv("SYNAPSE_EMBED_MAX_TOTAL_CHARS", "60000"))
 
 # ── System Prompt (bilingual RU/EN) ─────────────────────────────────────────
 SYSTEM_PROMPT = """CRITICAL RULE: Always respond in the SAME language the user writes in. If user writes in Russian — answer in Russian. If in English — answer in English. This is your #1 priority.
@@ -382,6 +389,60 @@ TTS_RATE_LIMIT_RPM = int(os.getenv("SYNAPSE_TTS_RATE_LIMIT", "5"))
 TTS_MONTHLY_CHAR_CAP = int(os.getenv("SYNAPSE_TTS_MONTHLY_CHAR_CAP", "900000"))
 # Where the persistent monthly char counter lives (resets on a new calendar month).
 TTS_BUDGET_FILE = os.getenv("SYNAPSE_TTS_BUDGET_FILE", str(BASE_DIR / "tts_char_budget.json"))
+
+# ── /api/tokenize/count — global daily call cap ──────────────────────────────
+# This endpoint is an UNAUTHENTICATED relay to the owner's Google API key. Its
+# only guard was a per-IP rate limit, and per-IP limits are defeated by having
+# more IPs — trivially so over IPv6. Google does not document countTokens as
+# billed, so the exposure here is the key's QUOTA rather than a bill: a stranger
+# can spend it, and then the Lab's exact token counts stop working for the real
+# visitors the site exists to impress.
+#
+# The fix is the shape that already works for Chirp: one global counter, checked
+# before the paid call, that no amount of IP rotation can go around. It is
+# deliberately DAILY, not monthly — the failure being prevented is somebody
+# else's abuse, and a monthly cap would answer that by switching the feature off
+# until the calendar turns. 2000 calls/day is far past any honest use of a
+# portfolio Lab (a whole session is tens) and small enough to be worth nothing
+# to an abuser. 0 disables the cap.
+TOKENIZE_DAILY_CALL_CAP = int(os.getenv("SYNAPSE_TOKENIZE_DAILY_CAP", "2000"))
+# EXACT ids the relay will forward. Not a prefix match — `startswith("gemini")`
+# was, and that let an attacker-chosen string reach Google. Two ways it hurt:
+#
+#   1. Any `gemini-<anything>` egressed with the owner's key and came back an
+#      error, which the old code refunded — so rejected calls were free and the
+#      cap did not bind on them.
+#   2. google-genai's own `t_model` raises a plain ValueError, BEFORE any socket
+#      work, for a model containing `..`, `?` or `&`. Charging for those would
+#      have handed anyone a way to drain the day's allowance with zero traffic
+#      to Google — a free kill switch on the feature.
+#
+# Validating the id before the counter is touched removes both at once: an
+# unknown model is a 400 that costs nothing and goes nowhere, and everything
+# that gets past this list is a request we are willing to pay for and to count.
+# The list is duplicated from the frontend roster ON PURPOSE — the backend does
+# not trust the frontend, and a relay that forwards whatever it is told is not
+# a relay, it is an open proxy. Keep in step with the `api`-backed entries in
+# src/lib/tokenizer/engine.ts.
+TOKENIZE_ALLOWED_MODELS = frozenset(
+    {
+        "claude-fable-5",
+        "claude-opus-4.8",
+        "claude-opus-5",
+        "claude-sonnet-5",
+        "claude-haiku-4-5",
+        "gemini-3.1-pro",
+        "gemini-3.5-flash",
+        "gemini-3.6-flash",
+        "gemini-3.7-flash",
+        "gemma-4-e2b",  # counted with a Gemini model of the same vocab family
+    }
+)
+# Next to the TTS counter, so both land in the writable state dir on the server
+# (the service user cannot write inside the code tree).
+TOKENIZE_BUDGET_FILE = os.getenv("SYNAPSE_TOKENIZE_BUDGET_FILE", "") or str(
+    Path(TTS_BUDGET_FILE).parent / "tokenize_call_budget.json"
+)
 
 # ── Server ───────────────────────────────────────────────────────────────────
 # Default to loopback (fail-closed): the documented topology puts a reverse proxy

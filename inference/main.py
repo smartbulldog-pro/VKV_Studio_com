@@ -27,6 +27,7 @@ from pathlib import Path
 from typing import Any, AsyncGenerator, Callable, Iterator
 
 from fastapi import FastAPI, File, HTTPException, Request, UploadFile
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel, Field, ValidationError
@@ -48,6 +49,7 @@ from config import (
     CORS_ORIGINS,
     EMBED_MAX_CHARS,
     EMBED_MAX_TEXTS,
+    EMBED_MAX_TOTAL_CHARS,
     EMBED_NATIVE_DIMS,
     EMBED_SERVER_HOST,
     ENABLE_DOCS,
@@ -71,6 +73,9 @@ from config import (
     GEN_QUOTA_MAX,
     GEN_QUOTA_WINDOW_SEC,
     GEN_REQUIRE_AUTH,
+    TOKENIZE_ALLOWED_MODELS,
+    TOKENIZE_BUDGET_FILE,
+    TOKENIZE_DAILY_CALL_CAP,
     RATE_LIMIT_RPM,
     SERVER_HOST,
     SERVER_PORT,
@@ -178,6 +183,7 @@ gemini_client = genai.Client(api_key=google_api_key) if genai and google_api_key
 
 # Secret-safe exception rendering for logs (see log_safety.py). Client responses
 # already use static generic strings; this hardens server-side log hygiene.
+from tts_budget import TTSBudget
 from log_safety import safe_err as _safe_err, oneline as _oneline
 
 
@@ -298,10 +304,70 @@ def get_client_ip(request: Request) -> str:
 # via NAT/carriers, reassigned, spoofable — a cross-tenant leak). Anonymous users get
 # NO server-side history at all (their history lives only in the browser's IndexedDB).
 # The IP is still used, but ONLY for rate-limiting (see get_client_ip).
+class _CachingCertsRequest:
+    """A google-auth transport that remembers Google's signing certificates.
+
+    The comment this replaces said the JWKS fetch was "cached by the lib". It is
+    not. `google.oauth2.id_token.verify_oauth2_token` calls `_fetch_certs`, and
+    `_fetch_certs` is three lines that do a plain GET every single time — read
+    from the installed package, not assumed. So every authenticated request made
+    a fresh HTTPS round-trip to Google before it could do anything else: every
+    conversation sync, and now every signed-in generation call. On a four-core
+    ARM box behind a tunnel that is real latency, and it puts Google's
+    availability in front of the owner's own history.
+
+    Verification fails closed, so a stale cache would lock people out rather
+    than let anyone in. That is why the TTL comes from Google's own
+    `Cache-Control: max-age` — the header exists precisely so clients refresh
+    before a key rotates — and is clamped rather than trusted blindly.
+    """
+
+    _MIN_TTL = 300.0      # 5 min: never hammer the endpoint on a bad header
+    _MAX_TTL = 6 * 3600.0  # 6 h: never outlive a rotation by much
+    _DEFAULT_TTL = 3600.0  # 1 h: used when the header is missing or unparseable
+
+    def __init__(self, inner) -> None:
+        self._inner = inner
+        self._lock = threading.Lock()
+        self._cache: dict[str, tuple[float, object]] = {}
+
+    @classmethod
+    def _ttl_from(cls, response) -> float:
+        raw = ""
+        try:
+            raw = (response.headers or {}).get("Cache-Control", "") or ""
+        except Exception:  # noqa: BLE001 — a header we cannot read is just a default TTL
+            return cls._DEFAULT_TTL
+        m = re.search(r"max-age\s*=\s*(\d+)", raw, re.I)
+        if not m:
+            return cls._DEFAULT_TTL
+        try:
+            return min(cls._MAX_TTL, max(cls._MIN_TTL, float(m.group(1))))
+        except ValueError:
+            return cls._DEFAULT_TTL
+
+    def __call__(self, url, method="GET", **kwargs):
+        # Only GETs are cacheable, and only successful ones are stored — an
+        # error response must not be remembered as if it were the key set.
+        if method != "GET":
+            return self._inner(url, method=method, **kwargs)
+        now = time.monotonic()
+        with self._lock:
+            hit = self._cache.get(url)
+            if hit is not None and hit[0] > now:
+                return hit[1]
+        response = self._inner(url, method=method, **kwargs)
+        if getattr(response, "status", None) == 200:
+            with self._lock:
+                self._cache[url] = (now + self._ttl_from(response), response)
+        return response
+
+
 try:
     from google.oauth2 import id_token as _google_id_token
     from google.auth.transport import requests as _google_requests
-    _google_request = _google_requests.Request()  # reused HTTP session for JWKS (cached by the lib)
+    # Reused HTTP session, wrapped so the certificate fetch is actually cached.
+    _google_request = _CachingCertsRequest(_google_requests.Request())
     _GOOGLE_AUTH_AVAILABLE = True
 except ImportError:  # google-auth not installed → auth disabled, app runs anonymous/local-only
     _GOOGLE_AUTH_AVAILABLE = False
@@ -460,11 +526,24 @@ def check_rate_limit(client_ip: str, scope: str = "global", limit: int | None = 
     # Bound total distinct keys (memory DoS via rotating IPs). Evict oldest-inserted
     # keys (dicts preserve insertion order) until back under the cap; never evict the
     # key we just touched.
+    #
+    # GENERATION-QUOTA KEYS ARE NEVER EVICTED HERE. They live in the same dict, and
+    # evicting one does not free memory so much as hand back an allowance: flooding
+    # this endpoint from rotating IPs — trivial over IPv6, which is the whole reason
+    # the cap exists — would push the quota entries out and reset the five-messages-
+    # per-five-hours limit for everybody, including the flooder. A cheap request
+    # would then buy back the expensive one, which is the wrong way round.
+    #
+    # Leaving them is safe: one short list per subject, removed by the sweep as soon
+    # as its window expires (that sweep is already prefix-aware). Even a very large
+    # number of distinct callers within one window costs a few tens of MB on a box
+    # with 23 GB, and unlike the burst counters these entries are the thing being
+    # protected rather than a cache.
     if len(_rate_limit_store) > _MAX_RATE_LIMIT_KEYS:
         for old_key in list(_rate_limit_store.keys()):
             if len(_rate_limit_store) <= _MAX_RATE_LIMIT_KEYS:
                 break
-            if old_key != key:
+            if old_key != key and not old_key.startswith(GEN_QUOTA_KEY_PREFIX):
                 del _rate_limit_store[old_key]
 
 
@@ -488,26 +567,39 @@ async def require_generation_access(request: Request) -> str:
 
     The 429 carries Retry-After and says in words when the allowance returns —
     "Rate limit exceeded" tells a visitor nothing about what to do next.
+
+    THE QUOTA APPLIES TO ANONYMOUS CALLERS TOO, keyed by IP. It did not, and the
+    gap made the whole control decorative: with GEN_REQUIRE_AUTH off — which is
+    the state whenever generation is not on a metered GPU — an anonymous caller
+    returned here BEFORE the quota ran, so "five messages per five hours" bound
+    nobody. Signing in was the only way to become rate-limited, which is exactly
+    backwards. An IP is a weaker identity than an account and a shared NAT shares
+    the allowance; that is the correct trade for a demo, and far better than the
+    unlimited claim on the box it replaces.
     """
     owner = await authenticated_owner(request)
 
     if owner is None:
-        if not GEN_REQUIRE_AUTH:
-            return ""
-        raise HTTPException(
-            status_code=401,
-            detail=(
-                "Sign in to talk to the real model. The assistant runs on a metered "
-                "GPU, so live answers are for signed-in visitors; without an account "
-                "you get the scripted demo instead."
-            ),
-        )
+        if GEN_REQUIRE_AUTH:
+            raise HTTPException(
+                status_code=401,
+                detail=(
+                    "Sign in to talk to the real model. The assistant runs on a metered "
+                    "GPU, so live answers are for signed-in visitors; without an account "
+                    "you get the scripted demo instead."
+                ),
+            )
+        # Anonymous but allowed: metered by IP rather than waved through.
+        quota_subject = f"ip:{get_client_ip(request)}"
+        owner = ""
+    else:
+        quota_subject = owner
 
     if GEN_QUOTA_MAX <= 0:  # 0 disables the quota
         return owner
 
     now = time.time()
-    key = f"{GEN_QUOTA_KEY_PREFIX}{owner}"
+    key = f"{GEN_QUOTA_KEY_PREFIX}{quota_subject}"
     hits = [ts for ts in _rate_limit_store[key] if now - ts < GEN_QUOTA_WINDOW_SEC]
     _rate_limit_store[key] = hits
 
@@ -683,6 +775,26 @@ app = FastAPI(
     redoc_url=None,
 )
 
+
+@app.exception_handler(RequestValidationError)
+async def _validation_error(request: Request, exc: RequestValidationError) -> JSONResponse:
+    """Answer a malformed request with a STATIC 422 — never the caller's own body.
+
+    FastAPI's default validation handler serializes Pydantic's `input` field,
+    which is the raw request body, straight back into the response. Two problems,
+    both demonstrated: it reflects whatever was sent (a canary posted to
+    /api/chat and /api/embed came back verbatim — a 1:1 echo bounded only by the
+    12 MB request cap), and validation runs as a dependency BEFORE the handler
+    body where `check_rate_limit` lives, so those echoes are unmetered. A static
+    body removes the reflection and the amplification in one line each.
+
+    Safe for the frontend: the client throws on any non-2xx via `httpError`
+    (synapse-client.ts) BEFORE it ever reads a body, so it sees the 422 status
+    and never the `detail`. Nothing in src/ parses a 422 payload.
+    """
+    return JSONResponse(status_code=422, content={"detail": "Invalid request"})
+
+
 # CORS
 app.add_middleware(
     CORSMiddleware,
@@ -696,6 +808,13 @@ app.add_middleware(
         "X-Synapse-Language",
         "X-Synapse-Audio-Format",
         "X-Synapse-Model",
+        # Retry-After is set on every 429 this server returns, and the browser
+        # hides any response header not named here from cross-origin JS. Without
+        # it the client could see the 429 but not the "how long" — so a visitor
+        # who had spent the 5-messages-per-5-hours allowance was told the server
+        # was busy and should be retried in a moment, which was both false and
+        # an invitation to hammer the box. The number exists; let the page read it.
+        "Retry-After",
     ],
 )
 
@@ -790,6 +909,32 @@ class SecurityHeadersMiddleware:
                 # crawlable surface at all.
                 if b"x-robots-tag" not in existing:
                     headers.append((b"x-robots-tag", b"noindex, nofollow, noarchive"))
+                # HSTS, but only on a request that actually arrived over TLS.
+                # RFC 6797 requires a UA to IGNORE this header on a plain-HTTP
+                # response, so sending it unconditionally is noise; sending it
+                # never is worse. The site's own _headers file already pins the
+                # apex with includeSubDomains, which covers this host — but only
+                # for a client that visited vkvstudio.com first in the same
+                # browser. Anything that reaches api.vkvstudio.com directly had
+                # no pin at all, and this host answers plain HTTP with real
+                # JSON. This makes the API assert its own policy.
+                #
+                # Behind the Cloudflare tunnel the origin sees the hop as http,
+                # so the real scheme is X-Forwarded-Proto. Falls back to the ASGI
+                # scheme when the header is absent (direct origin access, tests).
+                # NOT a redirect: that belongs to "Always Use HTTPS" on the
+                # Cloudflare zone, where it can be enforced before the request
+                # ever leaves the edge.
+                fwd = b""
+                for k, v in scope.get("headers", []):
+                    if k.lower() == b"x-forwarded-proto":
+                        fwd = v.split(b",")[0].strip().lower()
+                        break
+                scheme = fwd.decode("ascii", "replace") if fwd else scope.get("scheme", "")
+                if scheme == "https" and b"strict-transport-security" not in existing:
+                    headers.append(
+                        (b"strict-transport-security", b"max-age=31536000; includeSubDomains")
+                    )
                 message = {**message, "headers": headers}
             await send(message)
 
@@ -800,6 +945,11 @@ class SecurityHeadersMiddleware:
 # before it can be buffered by any inner handler.
 app.add_middleware(ContentLengthLimitMiddleware, max_bytes=MAX_REQUEST_BYTES)
 app.add_middleware(SecurityHeadersMiddleware)
+
+
+@app.exception_handler(RequestValidationError)
+async def _validation_error(request: Request, exc: RequestValidationError):
+    return JSONResponse({"detail": "Invalid request"}, status_code=422)
 
 
 # ── Request/Response Models ──────────────────────────────────────────────────
@@ -855,7 +1005,13 @@ class TokenizeRequest(BaseModel):
 
 # ── Endpoints ────────────────────────────────────────────────────────────────
 
-@app.get("/api/health", response_model=HealthResponse)
+# HEAD as well as GET, and the distinction is FastAPI's, not Starlette's:
+# a plain Starlette Route adds HEAD to any GET route automatically, but
+# FastAPI's APIRoute does not. So `HEAD /api/health` answered 405 — which is
+# how most uptime monitors probe a liveness endpoint, and would have read as
+# the service being down the day one was pointed at it. Found in the service
+# log, where a HEAD from the edge sat next to the GETs returning 200.
+@app.api_route("/api/health", methods=["GET", "HEAD"], response_model=HealthResponse)
 async def health_check() -> HealthResponse:
     """Liveness probe — cheap check that the process is up and serving.
 
@@ -916,13 +1072,24 @@ def map_model_name(model_id: str) -> str:
         # answers with a real count from the right tokenizer, or the call fails
         # and the frontend degrades to its honest 'approx' estimate.
         "claude-sonnet-4.6": "claude-sonnet-4-6-20250514",
-        # Gemini — the fictional "gemini-3.5-pro" id and its "closest available"
-        # substitution to gemini-3.1-pro-preview are gone; Google never shipped
-        # a 3.5 Pro, and the frontend now keys the row as gemini-3.1-pro, which
-        # is passed through untouched. UNVERIFIED: whether Google's API wants
-        # the GA name or a -preview suffix. If it wants the latter this call
-        # errors and the frontend falls back to its honest 'approx' estimate —
-        # which is the correct failure, not a silently substituted count.
+        # Gemini — the fictional "gemini-3.5-pro" id is long gone; Google never
+        # shipped a 3.5 Pro and the frontend keys the row as gemini-3.1-pro.
+        #
+        # RESOLVED 2026-08-14, and the answer was the suffix. The note here used
+        # to say it was UNVERIFIED whether Google's API wants the GA name or a
+        # -preview one, and that an error was the acceptable outcome. Asking the
+        # API itself settles it: ListModels on generativelanguage returns
+        # `models/gemini-3.1-pro-preview` and no bare `gemini-3.1-pro` at all,
+        # which is exactly why every Pro count came back 400 while both Flash
+        # models answered. Verified against the live catalogue, not a docs page.
+        #
+        # Note the asymmetry: this is a TRANSPORT-level rename, mapping our id
+        # onto the name Google's endpoint answers to. It is not the "closest
+        # available" substitution that was removed from this table earlier —
+        # that one silently counted a DIFFERENT model's tokens and reported the
+        # result as exact. Renaming a model to itself is safe; swapping one
+        # model for another is the lie worth refusing.
+        "gemini-3.1-pro": "gemini-3.1-pro-preview",
         "gemini-3.5-flash": "gemini-3.5-flash",
         "gemma-4-e2b": "gemini-3.5-flash",  # same vocab family
     }
@@ -930,6 +1097,26 @@ def map_model_name(model_id: str) -> str:
 
 
 TOKENIZE_PROVIDER_TIMEOUT = 15.0  # seconds — hard cap so a hung provider can't exhaust the thread pool
+
+# Global daily cap on the relay to the owner's provider keys. Lazily built, and
+# shared process-wide, exactly like the Chirp budget in tts.py — see
+# config.TOKENIZE_DAILY_CALL_CAP for why this is global rather than per-IP.
+_tokenize_budget: "TTSBudget | None" = None
+_tokenize_budget_lock = threading.Lock()
+
+
+def get_tokenize_budget() -> "TTSBudget":
+    global _tokenize_budget
+    if _tokenize_budget is None:
+        with _tokenize_budget_lock:
+            if _tokenize_budget is None:
+                _tokenize_budget = TTSBudget(
+                    TOKENIZE_BUDGET_FILE,
+                    TOKENIZE_DAILY_CALL_CAP,
+                    label="tokenize daily call",
+                    period_fmt="%Y-%m-%d",
+                )
+    return _tokenize_budget
 
 
 @app.post("/api/tokenize/count")
@@ -943,21 +1130,48 @@ def count_tokens(request: Request, body: TokenizeRequest):
     check_rate_limit(client_ip)
     _require_json(request)
 
-    try:
-        if body.model.startswith("claude"):
-            if not anthropic_client:
-                raise HTTPException(503, detail="Anthropic client not configured")
+    # ── Everything that can fail WITHOUT touching the network happens first ──
+    # The order is the security property. An unknown model id must cost nothing
+    # (or an attacker drains the day's allowance with junk and switches the
+    # feature off for everyone), and it must reach nobody (or an
+    # attacker-chosen string egresses on the owner's key). Validating before
+    # the reservation is what makes both true at once, and it is why nothing
+    # below this point is ever refunded.
+    if body.model not in TOKENIZE_ALLOWED_MODELS:
+        raise HTTPException(400, detail="Unknown model")
+    is_claude = body.model.startswith("claude")
+    if is_claude and not anthropic_client:
+        raise HTTPException(503, detail="Anthropic client not configured")
+    if not is_claude and not gemini_client:
+        raise HTTPException(503, detail="Google GenAI client not configured")
 
+    # Only now, with a request we are willing to pay for, spend from the cap.
+    # Per-IP limiting above bounds one caller's rate; this bounds everyone's
+    # total, which is the only thing IP rotation cannot walk around. NOT
+    # refunded on failure: past this line the request has been handed to the
+    # provider, and "the provider said no" is not evidence that nothing left
+    # the box — a timeout and a 429 both mean it demonstrably did.
+    budget = get_tokenize_budget()
+    if not budget.try_reserve(1):
+        logger.warning("Tokenize relay: daily cap of %d reached", budget.cap)
+        raise HTTPException(
+            status_code=429,
+            detail=(
+                "Exact token counts are unavailable for the rest of the day. "
+                "The tokenizer falls back to its local estimate."
+            ),
+            headers={"Retry-After": "3600"},
+        )
+
+    try:
+        if is_claude:
             result = anthropic_client.with_options(timeout=TOKENIZE_PROVIDER_TIMEOUT).messages.count_tokens(
                 model=map_model_name(body.model),
                 messages=[{"role": "user", "content": body.text}]
             )
             return {"totalTokens": result.input_tokens, "provider": "anthropic", "exact": True}
 
-        elif body.model.startswith("gemini") or body.model.startswith("gemma"):
-            if not gemini_client:
-                raise HTTPException(503, detail="Google GenAI client not configured")
-
+        else:
             result = gemini_client.models.count_tokens(
                 model=map_model_name(body.model),
                 contents=body.text,
@@ -967,8 +1181,9 @@ def count_tokens(request: Request, body: TokenizeRequest):
             )
             return {"totalTokens": result.total_tokens, "provider": "google", "exact": True}
 
-        raise HTTPException(400, "Unknown model")
-
+    # No refund on any path. The only failures reachable from here came back
+    # FROM the provider, which means the request went TO the provider — the
+    # thing the cap exists to count.
     except HTTPException:
         raise
     except Exception as e:
@@ -1080,14 +1295,28 @@ async def embed_endpoint(request: Request, body: EmbedRequest):
         raise HTTPException(status_code=503, detail="Embeddings not available")
 
     client_ip = get_client_ip(request)
-    # Dedicated, more generous scope than the global limit: embeddings are cheap
-    # and the Explorer fires one per (debounced) search keystroke.
-    check_rate_limit(client_ip, scope="embed", limit=60)
+    # Dedicated scope, separate from the global limit: the Explorer fires one call
+    # per debounced keystroke, so it needs headroom the chat endpoint does not.
+    # Lowered from 60/min: an embed call is not cheap in the way that comment
+    # assumed — it holds one of two inference slots on a 4-core box for as long as
+    # the batch takes, so sixty a minute from one caller is a denial of service
+    # with a polite name. Twenty still exceeds anything a human typing can produce.
+    check_rate_limit(client_ip, scope="embed", limit=20)
     _require_json(request)
 
     for t in body.texts:
         if len(t) > EMBED_MAX_CHARS:
             raise HTTPException(status_code=413, detail=f"Text too long. Max {EMBED_MAX_CHARS} chars per item.")
+
+    # The per-item cap above bounds one text; this bounds the WORK. Without it the
+    # maximum legal request is 256 x 4000 characters — a single call worth roughly
+    # a minute of the whole machine, which is the cheapest takedown this API sells.
+    total_chars = sum(len(t) for t in body.texts)
+    if total_chars > EMBED_MAX_TOTAL_CHARS:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Batch too large. Max {EMBED_MAX_TOTAL_CHARS} characters in total.",
+        )
 
     dims = _EMBED_MODEL_DIMS.get(body.model, EMBED_NATIVE_DIMS)
     try:
@@ -1621,6 +1850,19 @@ class ConversationRenameRequest(BaseModel):
     title: str = Field(..., min_length=1, max_length=200)
 
 
+# ── Conversation storage: OFF the event loop ─────────────────────────────────
+# Every one of these handlers is `async def`, and every one of them used to call
+# chat_storage synchronously — so each DB round trip blocked the single event
+# loop that also serves /api/chat, /api/health and every other request. On a
+# four-core ARM box that is not theoretical: the retention purge already runs on
+# a worker thread (`asyncio.to_thread(chat_storage.purge_old, ...)` in the
+# lifespan), so a purge and a route could contend the same SQLite lock with the
+# route holding the loop hostage while it waited.
+#
+# chat_storage opens a FRESH connection per call, runs WAL, and guards writes
+# with its own threading.Lock, so it is safe to call from a worker thread — that
+# is why this is a wrap rather than a rewrite. Same idiom the LLM, STT and TTS
+# paths already use throughout this file.
 @app.get("/api/conversations")
 async def list_conversations(request: Request):
     """List all conversations for the signed-in account (no messages, lightweight).
@@ -1629,7 +1871,7 @@ async def list_conversations(request: Request):
     owner = await authenticated_owner(request)
     if owner is None:
         raise HTTPException(status_code=401, detail="Sign in to sync conversations")
-    convs = chat_storage.list_conversations(owner)
+    convs = await asyncio.to_thread(chat_storage.list_conversations, owner)
     return JSONResponse({"conversations": convs})
 
 
@@ -1640,7 +1882,7 @@ async def get_conversation(conv_id: str, request: Request):
     owner = await authenticated_owner(request)
     if owner is None:
         raise HTTPException(status_code=401, detail="Sign in to sync conversations")
-    conv = chat_storage.get_conversation(owner, conv_id)
+    conv = await asyncio.to_thread(chat_storage.get_conversation, owner, conv_id)
     if not conv:
         raise HTTPException(status_code=404, detail="Conversation not found")
     return JSONResponse(conv)
@@ -1684,7 +1926,7 @@ async def save_conversation(request: Request):
 
     logger.info("SAVE conv id=%s title=%r msgs=%d from=%s", _oneline(body.id, 64), body.title, len(body.messages), client_ip)
     try:
-        chat_storage.save_conversation(owner, body.model_dump())
+        await asyncio.to_thread(chat_storage.save_conversation, owner, body.model_dump())
     except ConversationOwnershipError:
         logger.warning("Rejected cross-owner conversation write id=%s from=%s", _oneline(body.id, 64), client_ip)
         raise HTTPException(status_code=403, detail="Forbidden") from None
@@ -1718,35 +1960,65 @@ async def save_conversation_beacon(request: Request):
         except ValueError:
             pass
 
+    # Bound before the try so the ownership handler below can name it even when
+    # the body never parsed.
+    conv_id = "?"
     try:
         raw = await request.body()
         if len(raw) > MAX_BEACON_BODY_BYTES:
             return JSONResponse({"error": "Payload too large"}, status_code=413)
 
         data = json.loads(raw)
-        # Validate required fields
-        conv_id = data.get("id", "")
-        # Same id contract as the JSON endpoint's Pydantic model: non-empty, <=64,
-        # safe charset (rejects control chars / log-injection at the door).
-        if not isinstance(conv_id, str) or not re.fullmatch(r"[A-Za-z0-9._:-]{1,64}", conv_id):
-            return JSONResponse({"error": "invalid id"}, status_code=400)
+        if not isinstance(data, dict):
+            return JSONResponse({"error": "invalid body"}, status_code=400)
 
         # sendBeacon can't set headers → the Google ID token rides in the body,
         # verified identically to the Authorization: Bearer path. Anonymous → 401.
-        tok = data.get("idToken")
+        # Popped BEFORE validation: it is transport, not conversation data, and
+        # leaving it in would fail the model as an unexpected field.
+        tok = data.pop("idToken", None)
         owner = await authenticated_owner(request, tok if isinstance(tok, str) else None)
         if owner is None:
             return JSONResponse({"error": "unauthorized"}, status_code=401)
+
+        # SAME Pydantic model as the JSON route. This used to be a hand-written
+        # subset of it, and the subset was missing the parts that matter: the id
+        # charset was checked, but `createdAt`/`updatedAt` went to the SQLite bind
+        # with no type and no bounds at all, and every message item — id, role,
+        # content, timestamp — went through unvalidated.
+        #
+        # The worst of those was `updatedAt`. The JSON route bounds it at
+        # 4102444800000 (about the year 2100); the beacon accepted anything, so a
+        # conversation stamped far enough in the future was IMMUNE TO THE 30-DAY
+        # RETENTION PURGE — a permanent record in a store whose whole policy is
+        # that it does not keep one. An unexpected `role` was a second: it passes
+        # a dict but violates the DB's CHECK constraint, which is an uncaught
+        # IntegrityError and a 500.
+        #
+        # Two validators for one shape is how the second one ends up weaker. One
+        # model, both paths.
+        #
+        # `messages` is truncated BEFORE validation rather than rejected, and only
+        # that field: this runs during page unload, where a 422 reaches nobody and
+        # simply loses the save. A stale tab holding an older bundle should still
+        # get its last hundred messages stored.
+        if isinstance(data.get("messages"), list):
+            # Newest 100, not oldest: [:100] kept the FIRST hundred and dropped
+            # everything the user had just written — the exact opposite of the
+            # comment above and of chat_storage's own messages[-MAX:] policy.
+            data["messages"] = data["messages"][-100:]
+        try:
+            beacon = ConversationSaveRequest.model_validate(data)
+        except ValidationError:
+            return JSONResponse({"error": "invalid conversation data"}, status_code=400)
+
+        conv_id = beacon.id
         logger.info("BEACON save id=%s title=%s msgs=%d from=%s",
-                     _oneline(conv_id, 64), _oneline(str(data.get("title", "")), 200),
-                     len(data.get("messages", [])), client_ip)
-        chat_storage.save_conversation(owner, {
-            "id": conv_id,
-            "title": data.get("title", "New Chat")[:200],
-            "createdAt": data.get("createdAt", 0),
-            "updatedAt": data.get("updatedAt", 0),
-            "messages": data.get("messages", [])[:100],
-        })
+                     _oneline(conv_id, 64), _oneline(beacon.title, 200),
+                     len(beacon.messages), client_ip)
+        await asyncio.to_thread(
+            chat_storage.save_conversation, owner, beacon.model_dump()
+        )
         return JSONResponse({"status": "ok"})
     except ConversationOwnershipError:
         logger.warning("Rejected cross-owner beacon write id=%s from=%s", _oneline(conv_id, 64), client_ip)
@@ -1764,7 +2036,7 @@ async def rename_conversation(conv_id: str, request: Request, body: Conversation
     if owner is None:
         raise HTTPException(status_code=401, detail="Sign in to sync conversations")
     _require_json(request)
-    found = chat_storage.rename_conversation(owner, conv_id, body.title)
+    found = await asyncio.to_thread(chat_storage.rename_conversation, owner, conv_id, body.title)
     if not found:
         raise HTTPException(status_code=404, detail="Conversation not found")
     return JSONResponse({"status": "ok"})
@@ -1777,7 +2049,7 @@ async def delete_conversation(conv_id: str, request: Request):
     owner = await authenticated_owner(request)
     if owner is None:
         raise HTTPException(status_code=401, detail="Sign in to sync conversations")
-    found = chat_storage.delete_conversation(owner, conv_id)
+    found = await asyncio.to_thread(chat_storage.delete_conversation, owner, conv_id)
     if not found:
         raise HTTPException(status_code=404, detail="Conversation not found")
     return JSONResponse({"status": "ok"})

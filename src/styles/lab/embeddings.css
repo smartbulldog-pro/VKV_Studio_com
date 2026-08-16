@@ -467,6 +467,7 @@
   display: flex;
   align-items: center;
   gap: var(--space-2);
+  min-height: 24px; /* WCAG 2.5.8 target size — label is the whole clickable area */
   font-size: var(--text-xs, 0.75rem);
   color: var(--text-secondary);
   cursor: pointer;
@@ -619,7 +620,8 @@
 
 .embedding-scene__tooltip-note {
   display: block;
-  color: var(--text-muted);
+  /* text-secondary (not text-muted) to clear AA on --bg-elevated if ever rendered. */
+  color: var(--text-secondary);
   font-size: var(--text-2xs);
   line-height: var(--leading-relaxed);
 }
@@ -1172,6 +1174,7 @@
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
+  min-height: 24px; /* WCAG 2.5.8 target size */
   font-size: var(--text-sm);
   color: var(--text-secondary);
   cursor: pointer;
@@ -1834,6 +1837,15 @@
   .embeddings {
     padding: var(--space-4);
     gap: var(--space-4);
+  }
+
+  /* The 5-tab switcher is ~548px wide unwrapped vs ~343px available at 375px —
+     wrap it so it can't push the page into horizontal scroll (no overflow-x:hidden
+     ancestor exists to catch it). */
+  .embeddings__tabs {
+    flex-wrap: wrap;
+    row-gap: var(--space-1);
+    max-width: 100%;
   }
 
   .embeddings__header {

@@ -53,6 +53,8 @@
     migrateOldData,
     setLocalChatOwner,
     adoptAnonConversations,
+    purgeStaleAnonConversations,
+    touchBrowserSession,
     type Conversation,
     type StoredMessage,
   } from '@/lib/synapse-db';
@@ -67,6 +69,50 @@
 
   // ─── Synapse client instance ──────────────────────────────────────────────
   const synapseClient = createSynapseClient({ baseUrl: SYNAPSE_API_BASE });
+
+  /**
+   * Speech-to-text works again, so the microphone is back.
+   *
+   * It was hidden on 15 August because the live /api/voice returned HTTP 500 in
+   * 0.1 s: the configured path ran through the multimodal E4B, which is not the
+   * model being served, so the button asked for the microphone and handed the
+   * visitor a server error. Hidden rather than deleted — everything behind it
+   * stayed intact, and this constant is the whole switch.
+   *
+   * Turned back on the same evening, once the Google Cloud Speech-to-Text
+   * backend was made to work and VERIFIED end to end against the live endpoint,
+   * not merely deployed: a real Chirp-synthesised clip POSTed to
+   * https://api.vkvstudio.com/api/voice came back HTTP 200 with
+   * `x-synapse-transcript` reading back the exact sentence and 66 KB of spoken
+   * reply. Speech in, Gemma, speech out.
+   *
+   * If voice input ever breaks again, set this to false and say so on the
+   * privacy page in the same commit — a control that fails is worse than a
+   * control that is absent, which is the whole reason it was ever hidden.
+   */
+  const STT_AVAILABLE = true;
+
+  /**
+   * Write a message to IndexedDB without letting a failed write break the send.
+   *
+   * `await addMessage(...)` sat bare in the middle of sendMessage, so a rejected
+   * write — private browsing, a quota refusal, an evicted or corrupted store —
+   * threw straight out of the function. `isThinking` had already been set to
+   * true and nothing downstream ran to put it back, so the terminal sat on
+   * PROCESSING for the rest of the session with the send button and the mic
+   * disabled, and no error anywhere. A browser that will not store history is a
+   * reason to lose history, not a reason to stop being able to talk.
+   */
+  async function persistMessage(
+    convId: string,
+    msg: { msgId: string; role: 'user' | 'assistant'; content: string; timestamp: number }
+  ): Promise<void> {
+    try {
+      await addMessage(convId, msg);
+    } catch (err) {
+      console.warn('[SynapseTerminal] Could not save a message locally:', err);
+    }
+  }
 
   // ─── Connection source indicator ─────────────────────────────────────────
   let connectionSource = $state<'live' | 'mock' | 'unknown'>('unknown');
@@ -193,6 +239,7 @@
 
   // Cleanup function for visibility sync
   let _cleanupVisibility: (() => void) | null = null;
+  let _heartbeat: number | null = null;
   // Cleanup function for the auth-change subscription
   let _cleanupAuth: (() => void) | null = null;
 
@@ -237,17 +284,28 @@
     const nextOwner = getProfile()?.sub ?? null;
     setLocalChatOwner(nextOwner);
 
-    if (isSignedIn()) {
-      await syncOnSignIn();
-      return;
-    }
-
-    // Signed out: drop the account's chats from view and start a fresh
-    // anonymous one. The data itself stays on disk, still owned by that `sub`,
-    // and comes back when they sign in again — it is simply no longer visible
-    // to the next person at this browser.
+    // Everything on screen belongs to the identity we are LEAVING, so it is
+    // cleared here for both directions rather than in one branch. Signing in
+    // used to return early and delegate the refresh to syncOnSignIn(), which
+    // only re-read the list `if (pulled)` — so a fresh account with nothing on
+    // the server pulled nothing, refreshed nothing, and kept the previous
+    // person's sidebar and open transcript visible until a reload. The owner
+    // filter was working the whole time; the view simply never asked it again.
+    // That is a worse failure than a wrong query, because it looks exactly like
+    // sign-in not separating anything at all.
     messages = [];
     currentConversationId = null;
+
+    // Adoption of this session's anonymous chats happens inside, and has to
+    // land before the list below is read or the just-adopted chat is missing
+    // from the sidebar it was adopted into.
+    if (isSignedIn()) {
+      await syncOnSignIn();
+    }
+
+    // Scoped to whoever is signed in NOW. Signed out, that is the anonymous
+    // owner: the account's chats stay on disk under their `sub` and return on
+    // the next sign-in, they are simply not visible to the next person here.
     conversations = await dbListConversations();
     if (conversations.length > 0) {
       await loadConversation(conversations[0].id);
@@ -259,21 +317,15 @@
   async function syncOnSignIn(): Promise<void> {
     if (!isSignedIn()) return;
     try {
-      const pulled = await pullFromServer();
-      if (pulled) {
-        conversations = await dbListConversations();
-        // The open conversation may have been replaced by a newer server copy,
-        // or may no longer exist — re-point the view at valid, current data.
-        if (currentConversationId && conversations.some((c) => c.id === currentConversationId)) {
-          await loadConversation(currentConversationId);
-        } else if (conversations.length > 0) {
-          await loadConversation(conversations[0].id);
-        }
-      }
+      await pullFromServer();
     } catch {
       // best-effort; local IndexedDB remains the source of truth
     }
-    backupLocalChatsToAccount();
+    // Awaited, unlike before: this re-tags this session's anonymous chats to
+    // the new owner, and applyIdentity() reads the conversation list straight
+    // afterwards. Left un-awaited, that read could race the re-tag and drop the
+    // chat the visitor was in the middle of when they signed in.
+    await backupLocalChatsToAccount();
   }
 
   // Detect prefers-reduced-motion once at mount
@@ -364,6 +416,14 @@
     // Migrate old storage formats → Dexie (runs once)
     await migrateOldData();
 
+    // Anonymous history lasts exactly as long as the browser stays open. This
+    // clears what a PREVIOUS browser session left behind, before the list below
+    // reads it — so a chat someone had here yesterday is never rendered to
+    // whoever sits down today. Signing in is what makes history durable; that is
+    // the whole point of the account, and it should be true rather than merely
+    // advertised. Runs once per browser session and only touches anonymous rows.
+    await purgeStaleAnonConversations();
+
     // Load conversations from Dexie (instant, survives Ctrl+R)
     conversations = await dbListConversations();
     if (conversations.length > 0) {
@@ -374,6 +434,13 @@
 
     // Setup visibility-change sync (beacon when tab hidden)
     _cleanupVisibility = setupVisibilitySync(() => currentConversationId);
+
+    // Tell other tabs we are alive. purgeStaleAnonConversations() reads this to
+    // tell "the browser was closed" apart from "a second tab just opened" — the
+    // two looked identical to sessionStorage, and the wrong guess deleted the
+    // conversation another tab was still writing into. The interval is well
+    // under SESSION_GAP_MS so a tab opened at any moment finds a fresh mark.
+    _heartbeat = window.setInterval(touchBrowserSession, 20_000);
   });
 
   onDestroy(() => {
@@ -382,6 +449,10 @@
     audioEngine = null;
     _cleanupVisibility?.();
     _cleanupAuth?.();
+    if (_heartbeat !== null) {
+      clearInterval(_heartbeat);
+      _heartbeat = null;
+    }
   });
 
   // ─── Open / Close watcher ────────────────────────────────────────────────────
@@ -791,8 +862,9 @@
     hasMessages = true;
     isThinking = true;
 
-    // ➙ Save user placeholder to Dexie IMMEDIATELY
-    await addMessage(convId, {
+    // ➙ Save user placeholder to Dexie IMMEDIATELY (best-effort — see persistMessage).
+    // Same hazard as the text path: this one also sets isThinking first.
+    await persistMessage(convId, {
       msgId: userMsg.id,
       role: 'user',
       content: listeningPlaceholder,
@@ -989,8 +1061,8 @@
     isTyping = false;
     hasMessages = true;
 
-    // ➙ Save user message to Dexie IMMEDIATELY
-    await addMessage(convId, {
+    // ➙ Save user message to Dexie IMMEDIATELY (best-effort — see persistMessage)
+    await persistMessage(convId, {
       msgId: userMsg.id,
       role: 'user',
       content: text,
@@ -1027,8 +1099,8 @@
     messages = [...messages, assistantMsg];
     const msgId = assistantMsg.id;
 
-    // ➙ Save empty assistant message shell to Dexie IMMEDIATELY
-    await addMessage(convId, {
+    // ➙ Save empty assistant message shell to Dexie IMMEDIATELY (best-effort)
+    await persistMessage(convId, {
       msgId,
       role: 'assistant',
       content: '',
@@ -1060,6 +1132,14 @@
       }
     }, 60_000);
 
+    // Set the moment the client tells us the mock is taking over, and read by
+    // the token/done handlers below. Without it the badge lied: the mock's
+    // reply is delivered through the ordinary onToken/onDone path, and both of
+    // those set the badge to LIVE — so every scripted answer arrived under a
+    // green "connected to the live inference server" label. The one state the
+    // badge exists to report was the one it could not report.
+    let answeredByMock = false;
+
     try {
       await synapseClient.chatStream(
         { message: text, history },
@@ -1076,6 +1156,8 @@
             // replied 429/503. The badge text itself is unchanged: the mock
             // really is what produced the words on screen.
             fallbackInfo = info;
+            answeredByMock = true;
+            connectionSource = 'mock';
           },
           onToken(token: string) {
             // Guard: if stream was aborted mid-flight, ignore stale tokens
@@ -1089,12 +1171,12 @@
             if (updated) {
               scheduleStreamSave(convId, msgId, updated.content);
             }
-            connectionSource = 'live';
+            connectionSource = answeredByMock ? 'mock' : 'live';
           },
           onDone(fullText: string) {
             if (streamSignal.aborted) return;
             isSpeaking = false;
-            connectionSource = 'live';
+            connectionSource = answeredByMock ? 'mock' : 'live';
             // Announce the finished reply once, politely (see liveAnnouncement).
             const done = messages.find((m) => m.id === msgId);
             liveAnnouncement = plainForSpeech(done?.content || fullText);
@@ -1407,9 +1489,7 @@
         >{t(uiLang, 'synapse.terminal.badgeLive')}</span
       >
     {:else if connectionSource === 'mock'}
-      <span
-        class="source-badge source-badge--mock"
-        title={mockBadgeTitle}
+      <span class="source-badge source-badge--mock" title={mockBadgeTitle}
         >{t(uiLang, 'synapse.terminal.badgeMock')}</span
       >
     {/if}
@@ -1565,7 +1645,7 @@
                 aria-label={t(uiLang, 'synapse.terminal.stopPlayback')}
                 title={t(uiLang, 'synapse.terminal.stopPlayback')}
               >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                   <rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor" />
                 </svg>
               </button>
@@ -1580,7 +1660,7 @@
               >
                 {#if synthesizingMsgId === msg.id}
                   <!-- Loading spinner -->
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" class="tts-spinner">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" class="tts-spinner" aria-hidden="true">
                     <path
                       d="M12 2v4m0 12v4M4.93 4.93l2.83 2.83m8.48 8.48l2.83 2.83M2 12h4m12 0h4M4.93 19.07l2.83-2.83m8.48-8.48l2.83-2.83"
                       stroke="currentColor"
@@ -1590,7 +1670,7 @@
                   </svg>
                 {:else}
                   <!-- Speaker icon -->
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                     <path
                       d="M11 5L6 9H2v6h4l5 4V5z"
                       stroke="currentColor"
@@ -1630,50 +1710,52 @@
 
   <!-- ── Input Bar ─────────────────────────────────────────────────────────── -->
   <div bind:this={inputBarEl} class="input-bar" style="opacity: 0; transform: translateY(60px);">
-    <!-- Mic button — voice input -->
-    <button
-      class="mic-btn"
-      class:mic-btn--recording={isVoiceRecording}
-      aria-label={isVoiceRecording
-        ? t(uiLang, 'synapse.terminal.micStopRecording')
-        : t(uiLang, 'synapse.terminal.micStartVoiceInput')}
-      title={isVoiceRecording
-        ? t(uiLang, 'synapse.terminal.micTitleStop')
-        : t(uiLang, 'synapse.terminal.micTitleStart')}
-      disabled={isThinking || isVoiceSpeaking}
-      onclick={handleMicClick}
-    >
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-        <rect x="9" y="2" width="6" height="12" rx="3" stroke="currentColor" stroke-width="1.5" />
-        <path
-          d="M5 10a7 7 0 0014 0"
-          stroke="currentColor"
-          stroke-width="1.5"
-          stroke-linecap="round"
-        />
-        <line
-          x1="12"
-          y1="19"
-          x2="12"
-          y2="22"
-          stroke="currentColor"
-          stroke-width="1.5"
-          stroke-linecap="round"
-        />
-        <line
-          x1="9"
-          y1="22"
-          x2="15"
-          y2="22"
-          stroke="currentColor"
-          stroke-width="1.5"
-          stroke-linecap="round"
-        />
-      </svg>
-      {#if isVoiceRecording}
-        <span class="mic-recording-label" aria-live="polite">REC</span>
-      {/if}
-    </button>
+    {#if STT_AVAILABLE}
+      <!-- Mic button — voice input. Gated on STT_AVAILABLE above. -->
+      <button
+        class="mic-btn"
+        class:mic-btn--recording={isVoiceRecording}
+        aria-label={isVoiceRecording
+          ? t(uiLang, 'synapse.terminal.micStopRecording')
+          : t(uiLang, 'synapse.terminal.micStartVoiceInput')}
+        title={isVoiceRecording
+          ? t(uiLang, 'synapse.terminal.micTitleStop')
+          : t(uiLang, 'synapse.terminal.micTitleStart')}
+        disabled={isThinking || isVoiceSpeaking}
+        onclick={handleMicClick}
+      >
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <rect x="9" y="2" width="6" height="12" rx="3" stroke="currentColor" stroke-width="1.5" />
+          <path
+            d="M5 10a7 7 0 0014 0"
+            stroke="currentColor"
+            stroke-width="1.5"
+            stroke-linecap="round"
+          />
+          <line
+            x1="12"
+            y1="19"
+            x2="12"
+            y2="22"
+            stroke="currentColor"
+            stroke-width="1.5"
+            stroke-linecap="round"
+          />
+          <line
+            x1="9"
+            y1="22"
+            x2="15"
+            y2="22"
+            stroke="currentColor"
+            stroke-width="1.5"
+            stroke-linecap="round"
+          />
+        </svg>
+        {#if isVoiceRecording}
+          <span class="mic-recording-label" aria-live="polite">REC</span>
+        {/if}
+      </button>
+    {/if}
 
     <!-- Text input -->
     <textarea

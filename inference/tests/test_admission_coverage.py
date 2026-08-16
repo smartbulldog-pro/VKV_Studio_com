@@ -39,7 +39,13 @@ def _route_body(path: str, verb: str = "post") -> str:
     exact-string match silently missed those.
     """
     marker = f'@app.{verb}("{path}"'
-    start = SRC.index(marker)
+    start = SRC.find(marker)
+    if start == -1:
+        # Routes registered with @app.api_route(...) instead of a verb shorthand
+        # — /api/health does that so it can answer HEAD as well as GET, which
+        # FastAPI's APIRoute (unlike a plain Starlette Route) will not add on
+        # its own. Look them up by path so this helper keeps finding them.
+        start = SRC.index(f'@app.api_route("{path}"')
     nxt = SRC.find("@app.", start + 10)
     return SRC[start : nxt if nxt != -1 else len(SRC)]
 

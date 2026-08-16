@@ -277,6 +277,7 @@
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
+  min-height: 24px; /* WCAG 2.5.8 target size */
   margin-left: auto;
   font-family: var(--font-mono);
   font-size: var(--text-xs);
@@ -631,7 +632,7 @@
   display: flex;
   gap: var(--space-1);
   padding: var(--space-1);
-  background: var(--bg-glass);
+  background: var(--glass-bg);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
   backdrop-filter: blur(20px);
@@ -649,8 +650,14 @@
   cursor: pointer;
   transition: var(--transition-colors);
 }
+/* --accent-cyan-400 does not exist and never did — no such token is defined
+   anywhere. `background` fell back to the transparent value from the base rule
+   while `color` still resolved, so the ACTIVE tab was painted --bg-obsidian on
+   --bg-obsidian: contrast 1.00:1, invisible, and invisible specifically for
+   whichever tab you are currently on. The tool's accent is green everywhere
+   else in this file (22 uses), so this is the token it always meant. */
 .prompt__tab.active {
-  background: var(--accent-cyan-400);
+  background: var(--accent-green-300);
   color: var(--bg-obsidian);
 }
 .prompt__tab:hover:not(.active) {

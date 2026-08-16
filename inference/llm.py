@@ -37,6 +37,7 @@ from config import (
     LLM_MAX_TOKENS,
     LLM_MIN_GEN_TOKENS,
     LLM_N_GPU_LAYERS,
+    LLM_REMOTE_CREDENTIALS,
     LLM_REMOTE_TIMEOUT,
     LLM_REMOTE_URL,
     LLM_TOKEN_SAFETY_MARGIN,
@@ -461,8 +462,16 @@ class SynapseLLM:
         rules in the system prompt can never be evicted by an overlong context.
         """
         last_msg = user_messages[-1]["content"] if user_messages else ""
+        # Ratio over LETTERS, not over the whole string — keep in step with
+        # rag/retriever.py:detect_lang, which explains why. Counting spaces,
+        # digits and punctuation as evidence for English meant a Russian
+        # question naming a Latin-spelled product ("Ты используешь llama.cpp?")
+        # could be told to answer in English, which is the one instruction in
+        # this hint the model reliably obeys.
         cyrillic = sum(1 for c in last_msg if "Ѐ" <= c <= "ӿ")
-        user_lang = "Russian" if cyrillic > len(last_msg) * 0.3 else "English"
+        latin = sum(1 for c in last_msg if ("a" <= c <= "z") or ("A" <= c <= "Z"))
+        letters = cyrillic + latin
+        user_lang = "Russian" if letters and cyrillic > letters * 0.3 else "English"
 
         word_cap = 350 if variant == VARIANT_E4B else 150
         lang_hint = (

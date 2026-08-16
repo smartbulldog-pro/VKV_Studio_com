@@ -54,26 +54,26 @@ const jsonLd = [
     '@type': 'SoftwareApplication',
     name: 'Edge Tokenizer Profiler',
     applicationCategory: 'DeveloperApplication',
-    operatingSystem: 'Web',
+    operatingSystem: 'All',
     url: toolUrl,
     description: meta.description,
     featureList:
       activeLang === 'ru'
         ? [
-            'Подсчёт токенов в реальном времени для GPT-5.5, Gemini, Claude и Llama',
+            'Подсчёт токенов в реальном времени для GPT, Gemini, Claude и Llama',
             'Сравнение стоимости между моделями',
             'Визуализация использования контекстного окна',
-            'Работает в браузере — текст токенизируется локально',
+            'Открытые токенизаторы считаются в браузере; для Claude и Gemini точное число берётся через API',
           ]
         : [
-            'Real-time token counts for GPT-5.5, Gemini, Claude, and Llama',
+            'Real-time token counts for GPT, Gemini, Claude, and Llama',
             'Side-by-side cost comparison across models',
             'Context-window usage visualization',
-            'Runs in your browser — text is tokenized locally',
+            'Open tokenizers run in your browser; Claude and Gemini get their exact counts through an API',
           ],
     // @id reference, NOT a fresh inline Person. Inlining one here created a
-    // SECOND, anonymous "Valery" node on the same page alongside the
-    // "Valery Karpov" defined in BaseLayout — the exact entity fragmentation
+    // SECOND, anonymous "Valerii" node on the same page alongside the
+    // "Valerii Karpov" defined in BaseLayout — the exact entity fragmentation
     // the @id graph exists to prevent. Confirmed by validator.schema.org,
     // which rendered them as two separate people.
     // Note also: this SoftwareApplication node is deliberately kept even

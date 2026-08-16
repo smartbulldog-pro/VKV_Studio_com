@@ -233,17 +233,32 @@
     isHov = dist < 50;
   }
 
-  function onClick() {
-    if (!isHov || flashActive) return;
+  function activate() {
+    if (flashActive) return;
     flashActive = true;
     flashStart = frameCount;
     setTimeout(() => {
       window.location.href = `/${altLang}/`;
     }, 300);
   }
+
+  // Mouse keeps the hover-radius guard (isHov, set by onMove). Keyboard has no
+  // pointer position, so focus arms it and Enter/Space activate directly —
+  // without this, tabbing here and pressing Enter was a silent no-op.
+  function onClick() {
+    if (!isHov) return;
+    activate();
+  }
+
+  function onKeydown(e: KeyboardEvent) {
+    if (!visible) return; // hidden after scroll — no keyboard activation
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      activate();
+    }
+  }
 </script>
 
-<!-- svelte-ignore a11y_click_events_have_key_events -->
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
   class="hero-lang"
@@ -251,9 +266,13 @@
   bind:this={wrapperEl}
   onmousemove={onMove}
   onmouseleave={() => { isHov = false; }}
+  onfocus={() => { isHov = true; }}
+  onblur={() => { isHov = false; }}
   onclick={onClick}
+  onkeydown={onKeydown}
   role="button"
-  tabindex="0"
+  tabindex={visible ? 0 : -1}
+  inert={!visible}
   aria-label={t(lang, 'nav.switchLanguageTo').replace('{lang}', altLang.toUpperCase())}
 >
   <canvas

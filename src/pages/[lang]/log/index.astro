@@ -41,9 +41,9 @@ const content: Record<Lang, LogContent> = {
   en: {
     bootLines: [
       '> boot build.log',
-      '> loading decisions ... 24',
+      '> loading decisions ... 25',
       '> stack: antigravity · gemma 4 · google cloud ai',
-      '> valery :: still here',
+      '> valerii :: still here',
     ],
     intro: [
       'I keep this log mostly for myself. It is the reasoning behind how I built this thing, decision by decision, so future me remembers why I did what I did.',
@@ -191,7 +191,7 @@ const content: Record<Lang, LogContent> = {
           'Talking back is a different job by nature. A language model makes text, not sound, so the voice out is always its own step. Chirp 3 does that half. Ears folded into the model, mouth handed to a dedicated Google service.',
         ],
         result: [
-          'One less moving part, a cleaner story, and a voice loop that stays inside the Google ecosystem the whole way from my desk to production. Fair warning, this one is still in flight, twice over. Voice-in rides on the same E4B I am reworking two entries up, so it lands properly once that model is back. And voice-out is not actually on Chirp yet: the code picks it, but with no Google Cloud credentials on the box it falls through to Edge TTS, which is what production speaks with today. The direction is set, the billing is not.',
+          'One less moving part, a cleaner story, and a voice loop that stays inside the Google ecosystem the whole way from my desk to production. Both halves have landed now, five days apart. Voice-out went live on Chirp 3 on 13 August, once the credentials were on the box. Voice-in took until the 15th, and not by the route written above: folding it into the multimodal E4B did not survive contact with which model is actually being served, so speech recognition went to Google Cloud Speech-to-Text instead. Ears bought rather than folded in. The plan here was half right, and the half that was wrong is the half I was most pleased with.',
         ],
       },
       {
@@ -311,7 +311,7 @@ const content: Record<Lang, LogContent> = {
         slug: 'i-built-the-sign-in',
         date: '2026-06-04',
         title: 'I built the sign-in the way I promised',
-        lead: 'The last entry was the reasoning. This one is the code catching up to it. Sign in with Google, and your history is yours; stay anonymous, and it never leaves your browser.',
+        lead: 'The last entry was the reasoning. This one is the code catching up to it. Sign in with Google, and your history is yours; stay anonymous, and it stays in this browser.',
         body: [
           'The server no longer knows you by your address. When you sign in, Google hands the page a signed token, the page sends it along, and the server checks the signature itself before it trusts a single byte. The check I care about most is a small one that is easy to forget: it demands the token was minted for this app specifically. Leave that out and any valid Google token from any other site would walk right in. With it, the only thing that opens your history is a token that was made for you, here.',
           'The token lives in memory and nowhere else. I did not tuck it into localStorage, because anything I can read there, a bad script on a bad day can read too. Google quietly re-issues it the next time you load the page, so keeping a copy on disk buys me nothing but a thing to lose. Sign out and it is simply gone. And if you never sign in, the whole path stays dark — no token, no request, your chats sit in your own browser and the server never hears about them. Anonymous does not mean filed under a quieter key anymore. It means not sent.',
@@ -327,7 +327,7 @@ const content: Record<Lang, LogContent> = {
         body: [
           "The Explorer takes a pile of words, asks the model for each one's vector, and drops them into a 3D map so near things sit near each other. It looked convincing because I had coloured every point by a category I had assigned in advance. But that is the con: the model never saw my categories. I sorted the words into buckets, coloured the buckets, and then presented the tidy result as if the model had discovered it. Circular. If I had bucketed the same words a different way — by length, by first letter, by mood — the map would have obliged just as neatly. The colours proved I could sort, not that meaning has edges.",
           'So I did the thing I should have done first: I stopped guessing and measured. I asked the model to group the words with no labels at all, let an honest clustering algorithm draw whatever boundaries the vectors actually support, and scored how clean those boundaries came out. The number came back near zero — the clusters barely separate. And that is not a failure, it is the finding. Meaning is not a drawer of neatly divided compartments; it is a continuous landscape where "apple" leans a little toward fruit and a little toward companies and a little toward a red round thing, all at once. The fuzziness I had been hiding was the actual truth of the space.',
-          'I ran it past a room of skeptics before I trusted my own conclusion, and they pushed on the same soft spot from every side: any demo that hands you tidy colours is selling you the labeller, not the model. So I tore the categories out. No more pre-assigned buckets, no more colour that means "the drawer Valery put this in." The map now colours by the one thing that is real — how close each point actually sits to what you searched — and the clustering is still there, but as an optional toggle with a note that says, in plain words, look how badly these separate; that muddiness is the point.',
+          'I ran it past a room of skeptics before I trusted my own conclusion, and they pushed on the same soft spot from every side: any demo that hands you tidy colours is selling you the labeller, not the model. So I tore the categories out. No more pre-assigned buckets, no more colour that means "the drawer Valerii put this in." The map now colours by the one thing that is real — how close each point actually sits to what you searched — and the clustering is still there, but as an optional toggle with a note that says, in plain words, look how badly these separate; that muddiness is the point.',
           'Then I rebuilt the demo around what these vectors genuinely do well, three things I verified on the live model instead of asserting. Search by meaning: ask for "something you sit on" and chair comes back on top though the word never appears. The same idea across two languages: cat and кошка land almost on the same spot, 0.89 apart from nothing, while a real mismatch sags to 0.61 so you can see the difference. And arithmetic on meaning: king minus man plus woman really does put queen first, checked against a pool that contains the answer so a hit is earned, and when a made-up analogy misses it is allowed to miss in the open. Every number on that page is now real, measured, and honest about when it is wrong. The old version flattered the model. This one shows it.',
         ],
       },
@@ -335,7 +335,7 @@ const content: Record<Lang, LogContent> = {
         n: '19',
         slug: 'making-it-work-unseen',
         date: '2026-06-22',
-        title: 'Making it work for someone who can not see it',
+        title: 'Making it work for someone who cannot see it',
         lead: 'A friend of mine is blind and genuinely curious about AI. So I finally asked the question I should have asked at the start: could he actually use this? I ran the audit myself, honestly, and the answer was no — not yet.',
         body: [
           'I went through the assistant the way a keyboard-and-screen-reader user has to, and the gaps were embarrassing once I saw them. The list of past conversations looked like buttons but was really a pile of plain boxes you could click with a mouse and never reach with a keyboard — so a blind user simply could not open an old chat. When the model streamed its reply, the whole answer was wired to announce itself on every single token, which means a screen reader reads a half sentence, gets interrupted by the next half, and piles them on top of each other until the response is mush. And a little token counter was white text sitting on an amber bar at a contrast a low-vision person cannot read at all.',
@@ -416,6 +416,22 @@ const content: Record<Lang, LogContent> = {
           'The rest of the day was the boring necessary thing: the domain has real email behind it now, which I need because the certification I am applying for next week does not accept personal addresses. And while I was in the privacy page I found it was wrong about my own voice pipeline as well. It never mentioned that when the assistant speaks out loud, the text of its answer goes to Google to be turned into audio. It also still claimed speech recognition worked. It does not. It speaks and it cannot hear. Both now say so.',
         ],
       },
+      {
+        n: '25',
+        slug: 'i-asked-for-skeptics',
+        date: '2026-08-15',
+        title: 'I asked for people to hate my site, and they were right',
+        lead: 'I set a group of reviewers on the live site with one instruction: attack it, and attack my defence of it too. What came back was not a list of bugs. It was a list of small lies the site was telling about itself.',
+        body: [
+          'The one I keep coming back to is the microphone. There is a mic button in the assistant. Click it, the browser asks for permission to record you, you speak, and the server answers with a five hundred. Not a polite refusal, an error. Speech recognition here runs through the bigger model, and the bigger model is not the one being served right now, so the feature simply could not work. I knew that. I had written it down in three separate places on this site: the privacy page, the file I publish for language models, and an entry a few paragraphs above this one. All three say the assistant can speak but cannot hear. And the button was still sitting there, still asking people for their microphone. Knowing a thing and shipping accordingly are apparently different skills.',
+          'Then the badge. When the backend is unreachable the assistant answers from a small scripted fallback, and there is a badge in the corner that is supposed to say so: LIVE when it is really the model, MOCK when it is not. The entire point of that badge is honesty. It never worked. The scripted reply is delivered through the same channel as a real one, and that channel flips the badge to LIVE on every token it carries. So every canned answer this site has ever given arrived under a green light saying it came from the live inference server. The one control whose whole job was to admit something could not admit it.',
+          'The scripted fallback itself was worse. It answered everyone in Russian, including the catch-all reply most people would land on, on a site that had just been speaking to them in English. And it described a stack I deleted six weeks ago: a runtime I no longer use, speech recognition I removed, a voice engine I replaced, a retrieval pipeline built on a vector database I never actually deployed. So while my server was asleep, my site confabulated about my own architecture, on the page whose argument is that I am careful about exactly that.',
+          'One stung in a different way, because it is a plain number. The price table in my prompt tool had Gemini Flash at exactly double its real price. Google publishes two columns, this year and next, and I read the wrong one. Being wrong by a factor of two about a Google model, on a site I am taking to Google, is not a rounding error. While I was in there I found four more of the same kind, including an instruction I had left myself to make the tool wrong on a future date, for a price increase that has since been cancelled.',
+          'And then the plain neglect. Ten of my twelve pages had no footer, which also meant no language switch: a bilingual site where landing on an English tool page from a search result left you no way to the Russian one but editing the address bar. The texture behind my own headline was five times larger than any screen can show, because I never measured the box I was painting it into. I measured it today. It is four hundred and twenty pixels wide and it does not grow with the window. The image was two and a half thousand.',
+          'What ties all of it together is not carelessness about code. Every one of these passed its tests, because no test asked the only question that mattered: is this true? The badge was structurally fine and said the wrong thing. The mic worked perfectly right up to the server. The price was a correctly formatted number off the wrong line. Same lesson as the entry above, from the other end. Last time I published a number without asking what it was. This time I shipped features without asking what they claimed.',
+          'Postscript, same evening. Taking the microphone away turned out to be the thing that got it fixed. With the button gone there was nothing to protect, so the honest question was simply whether speech recognition could be made to work — and the Google path, written weeks ago and never once called, failed on its first real request with a precise complaint: no sample rate. Two lines. It transcribes both languages word for word now, and the button is back. I have had worse days than one that ends with a feature I was about to write off.',
+        ],
+      },
     ],
     outro: [
       'That is the log for now. Every call here was a trade, and I made each one on purpose, even the ones I second-guessed later.',
@@ -425,7 +441,7 @@ const content: Record<Lang, LogContent> = {
   ru: {
     bootLines: [
       '> запуск build.log',
-      '> гружу решения ... 24',
+      '> гружу решения ... 25',
       '> стек: antigravity · gemma 4 · google cloud ai',
       '> валерий :: на месте',
     ],
@@ -575,7 +591,7 @@ const content: Record<Lang, LogContent> = {
           'Говорить в ответ это по природе другая работа. Языковая модель делает текст, а не звук, поэтому голос наружу это всегда отдельный шаг. Chirp 3 делает эту половину. Уши сложены в модель, рот отдан отдельному сервису Google.',
         ],
         result: [
-          'На одну движущуюся деталь меньше, история чище, и голосовая петля целиком остаётся внутри экосистемы Google, от моего стола до продакшена. Честно, эта часть ещё в движении, причём дважды. Слух стоит на той же E4B, которую я переучиваю парой записей выше, и встанет как надо, когда та модель вернётся. А голос наружу пока не на Chirp: код его выбирает, но учётных данных Google Cloud на машине нет, и он проваливается на Edge TTS — им продакшен и говорит сегодня. Направление задано, биллинг нет.',
+          'На одну движущуюся деталь меньше, история чище, и голосовая петля целиком остаётся внутри экосистемы Google, от моего стола до продакшена. Обе половины доехали, с разницей в пять дней. Голос наружу поехал на Chirp 3 13 августа, когда учётные данные оказались на машине. Слух доехал только 15-го и не тем путём, что описан выше: затея сложить его в мультимодальную E4B не пережила встречи с тем, какая модель на самом деле обслуживается, и распознавание ушло в Google Cloud Speech-to-Text. Уши куплены, а не встроены. План здесь оказался верен наполовину, и неверной была ровно та половина, которой я больше всего гордился.',
         ],
       },
       {
@@ -695,7 +711,7 @@ const content: Record<Lang, LogContent> = {
         slug: 'i-built-the-sign-in',
         date: '2026-06-04',
         title: 'Я собрал вход так, как обещал',
-        lead: 'Прошлая запись была рассуждением. Эта — код, догнавший его. Входишь через Google — история твоя; остаёшься анонимом — она не покидает браузер.',
+        lead: 'Прошлая запись была рассуждением. Эта — код, догнавший его. Входишь через Google — история твоя; остаёшься анонимом — она остаётся в этом браузере.',
         body: [
           'Сервер больше не знает тебя по адресу. Когда ты входишь, Google отдаёт странице подписанный токен, страница шлёт его дальше, и сервер сам проверяет подпись, прежде чем поверить хоть одному байту. Проверка, которая мне тут дороже всего, — маленькая и её легко забыть: сервер требует, чтобы токен был выпущен именно для этого приложения. Убери её — и любой валидный токен Google с любого другого сайта войдёт как к себе домой. С ней твою историю открывает только токен, сделанный для тебя и здесь.',
           'Токен живёт в памяти и больше нигде. Я не сунул его в localStorage, потому что всё, что оттуда могу прочитать я, в плохой день прочитает и плохой скрипт. Google тихо перевыпускает его при следующей загрузке страницы, так что копия на диске не даёт мне ничего, кроме того, что можно потерять. Вышел — и его просто нет. А если ты вовсе не входил, весь этот путь остаётся тёмным: нет токена — нет запроса, твои чаты сидят в твоём браузере, и сервер о них не слышит. Аноним больше не значит «под ключом потише». Он значит «не отправлено».',
@@ -800,6 +816,22 @@ const content: Record<Lang, LogContent> = {
           'Остаток дня ушёл на скучное и необходимое: у домена теперь есть настоящая почта — она нужна, потому что сертификация, на которую я подаюсь на следующей неделе, личные адреса не принимает. И пока я сидел в политике конфиденциальности, выяснилось, что она врёт и про мой собственный голосовой тракт. Там не было ни слова о том, что когда ассистент говорит вслух, текст его ответа уезжает в Google и превращается там в звук. Зато было написано, что распознавание речи работает. Не работает. Он говорит и не слышит. Теперь так и написано.',
         ],
       },
+      {
+        n: '25',
+        slug: 'i-asked-for-skeptics',
+        date: '2026-08-15',
+        title: 'Я попросил захейтить мой сайт, и оказались правы',
+        lead: 'Я натравил на живой сайт группу проверяющих с одной инструкцией: нападайте, и на мои возражения тоже нападайте. Вернулся не список багов. Вернулся список мелкой лжи, которую сайт рассказывал сам о себе.',
+        body: [
+          'Больше всего я возвращаюсь к микрофону. В ассистенте есть кнопка микрофона. Жмёшь — браузер просит разрешение тебя записывать, говоришь — сервер отвечает пятисоткой. Не вежливым отказом, а ошибкой. Распознавание речи здесь идёт через модель побольше, а обслуживается сейчас не она, так что функция просто не могла работать. Я это знал. Я это записал в трёх местах на этом же сайте: в политике конфиденциальности, в файле, который публикую для языковых моделей, и в записи парой абзацев выше. Во всех трёх написано, что ассистент говорит, но не слышит. А кнопка стояла и продолжала просить у людей микрофон. Знать и выкатывать соответственно — это, похоже, два разных навыка.',
+          'Дальше значок. Когда бэкенд недоступен, ассистент отвечает из маленькой заготовки, и в углу есть значок, который должен об этом сказать: LIVE, если это правда модель, MOCK, если нет. Весь смысл этого значка — честность. Он не работал ни разу. Заготовленный ответ едет по тому же каналу, что и настоящий, а этот канал на каждом переданном токене переключает значок в LIVE. То есть каждый шаблонный ответ, который этот сайт когда-либо выдал, приезжал под зелёной подписью «соединено с живым сервером инференса». Единственный элемент, чья работа — признаваться, признаться не мог.',
+          'Сама заготовка оказалась ещё хуже. Она отвечала всем по-русски, включая тот ответ на всё остальное, в который упирается большинство, — на сайте, который минуту назад говорил с человеком по-английски. И описывала стек, который я удалил шесть недель назад: рантайм, которым больше не пользуюсь, распознавание речи, которое убрал, голосовой движок, который заменил, поисковый конвейер на векторной базе, которую я так и не развернул. То есть пока мой сервер спал, мой сайт сочинял про мою же архитектуру — на странице, весь аргумент которой в том, что я с этим аккуратен.',
+          'Одно задело иначе, потому что это просто число. В таблице цен моего prompt-инструмента Gemini Flash стояла ровно вдвое дороже реальной. Google публикует две колонки, на этот год и на следующий, а я прочитал не ту. Ошибиться вдвое в цене модели Google на сайте, который я несу показывать Google, — это не округление. Пока сидел там, нашёл ещё четыре такие же, включая инструкцию, которую сам себе оставил: сделать инструмент неправильным в назначенную дату, ради повышения цены, которое с тех пор отменили.',
+          'И просто запущенное. У десяти страниц из двенадцати не было футера, а значит и переключателя языка: двуязычный сайт, где, попав из поиска на английскую страницу инструмента, ты не мог уйти на русскую иначе как правкой адреса. Текстура за моим собственным заголовком была впятеро крупнее, чем способен показать любой экран, потому что я ни разу не измерил коробку, в которую её крашу. Сегодня измерил. Четыреста двадцать пикселей шириной, и с окном она не растёт. Картинка была на две с половиной тысячи.',
+          'Связывает всё это не небрежность в коде. Каждая из этих вещей проходила свои тесты, потому что ни один тест не задавал единственный важный вопрос: это правда? Значок был структурно исправен и говорил неправду. Микрофон работал безупречно ровно до сервера. Цена была корректно оформленным числом не из той строки. Тот же урок, что и в записи выше, только с другого конца. В прошлый раз я опубликовал число, не спросив, что это за число. В этот раз выкатил функции, не спросив, что они утверждают.',
+          'Постскриптум, тот же вечер. Оказалось, что именно снятие микрофона его и починило. Когда кнопки не стало, защищать было нечего, и остался честный вопрос: а можно ли вообще заставить распознавание работать. Путь через Google, написанный недели назад и ни разу не вызванный, упал на первом же настоящем запросе с внятной жалобой: не указана частота дискретизации. Две строки. Теперь он разбирает оба языка слово в слово, и кнопка на месте. Бывали у меня дни хуже, чем тот, что кончается функцией, которую я уже почти списал.',
+        ],
+      },
     ],
     outro: [
       'Вот такой лог на сейчас. Каждое решение тут было разменом, и каждое я сделал осознанно, даже те, в которых потом сомневался.',
@@ -849,6 +881,9 @@ const jsonLd = [
     dateModified: `${newestDate}T09:00:00+04:00`,
     datePublished: `${oldestDate}T09:00:00+04:00`,
     mainEntityOfPage: logUrl,
+    // Google's Article/BlogPosting guidelines list `image` as required for
+    // rich-result eligibility; the locale OG cover is a real 1200x630 asset.
+    image: `https://vkvstudio.com/og-cover${activeLang === 'ru' ? '-ru' : ''}.jpg`,
     blogPost: page.entries.map((entry) => ({
       '@type': 'BlogPosting',
       '@id': `${logUrl}#${entry.slug}`,
@@ -857,6 +892,7 @@ const jsonLd = [
       // contradictory claims about one document. @id + url still give crawlers
       // the deep-link anchor, which was the actual goal.
       url: `${logUrl}#${entry.slug}`,
+      image: `https://vkvstudio.com/og-cover${activeLang === 'ru' ? '-ru' : ''}.jpg`,
       headline: entry.title,
       description: entry.lead,
       datePublished: `${entry.date}T09:00:00+04:00`,
@@ -990,9 +1026,9 @@ const jsonLd = [
               )}
 
               {entry.tools && (
-                <div class="log-tools">
+                <div class="log-tools" role="list">
                   {entry.tools.map((tool) => (
-                    <div class="log-tool">
+                    <div class="log-tool" role="listitem">
                       <span class="log-tool__name text-mono">{tool.name}</span>
                       <p class="log-tool__desc">{tool.desc}</p>
                     </div>

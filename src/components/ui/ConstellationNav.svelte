@@ -17,7 +17,8 @@
     labelEN: string;
     labelRU: string;
     target: string;
-    x: number; y: number;
+    x: number;
+    y: number;
     /** Label position relative to dot */
     labelPos: 'top' | 'left' | 'right' | 'bottom';
     /** Optional: draw glassmorphism background behind label */
@@ -25,8 +26,10 @@
   }
 
   interface PlexNode {
-    x: number; y: number;
-    baseX: number; baseY: number;
+    x: number;
+    y: number;
+    baseX: number;
+    baseY: number;
     born: number;
     branch: number;
     parentIdx: number;
@@ -44,7 +47,9 @@
     isAnchor: boolean;
   }
 
-  interface Props { lang: 'en' | 'ru'; }
+  interface Props {
+    lang: 'en' | 'ru';
+  }
   const { lang }: Props = $props();
 
   let isOpen = $state(false);
@@ -67,8 +72,8 @@
 
   // ── Binary Star — Language Switcher ────────────────────────
   const langNode = {
-    cx: 0.150,  // center x (relative)
-    cy: 0.930,  // center y (relative) — low position, shorter branches
+    cx: 0.15, // center x (relative)
+    cy: 0.93, // center y (relative) — low position, shorter branches
     orbitR: 18, // orbital radius in px
   };
   const altLang = lang === 'en' ? 'ru' : 'en';
@@ -83,43 +88,96 @@
 
   // ── Build Log — special route node (mirrors the lang node, bottom-right) ──
   const logNode = {
-    cx: 0.850, // center x (relative) — mirror of the lang node's 0.150
-    cy: 0.930, // center y (relative) — same low row as the lang node
+    cx: 0.85, // center x (relative) — mirror of the lang node's 0.150
+    cy: 0.93, // center y (relative) — same low row as the lang node
   };
   let isLogHov = false;
   let logFlashActive = false;
   let logFlashStart = 0;
 
   let animFrameId: number | null = null;
-  let mouseX = 0.5, mouseY = 0.5;
-  let rawMouseX = 0.5, rawMouseY = 0.5;
+  let mouseX = 0.5,
+    mouseY = 0.5;
+  let rawMouseX = 0.5,
+    rawMouseY = 0.5;
 
   // ── Nav data ───────────────────────────────────────────────
   const navItems: NavItem[] = [
-    { id: 'home',    labelEN: 'HOME',    labelRU: 'ГЛАВНАЯ',     target: '#hero-section', x: 0.500, y: 0.147, labelPos: 'top' },
-    { id: 'lab',     labelEN: 'LAB',     labelRU: 'ЛАБОРАТОРИЯ', target: '#lab',          x: 0.248, y: 0.466, labelPos: 'left' },
-    { id: 'about',   labelEN: 'ABOUT',   labelRU: 'ОБО МНЕ',    target: '#about',        x: 0.513, y: 0.560, labelPos: 'bottom' },
-    { id: 'stack',   labelEN: 'STACK',   labelRU: 'СТЕК',        target: '#stack',        x: 0.740, y: 0.623, labelPos: 'right' },
-    { id: 'contact', labelEN: 'CONTACT', labelRU: 'КОНТАКТ',     target: '#contact',      x: 0.578, y: 0.900, labelPos: 'bottom' },
+    {
+      id: 'home',
+      labelEN: 'HOME',
+      labelRU: 'ГЛАВНАЯ',
+      target: '#hero-section',
+      x: 0.5,
+      y: 0.147,
+      labelPos: 'top',
+    },
+    {
+      id: 'lab',
+      labelEN: 'LAB',
+      labelRU: 'ЛАБОРАТОРИЯ',
+      target: '#lab',
+      x: 0.248,
+      y: 0.466,
+      labelPos: 'left',
+    },
+    {
+      id: 'about',
+      labelEN: 'ABOUT',
+      labelRU: 'ОБО МНЕ',
+      target: '#about',
+      x: 0.513,
+      y: 0.56,
+      labelPos: 'bottom',
+    },
+    {
+      id: 'stack',
+      labelEN: 'STACK',
+      labelRU: 'СТЕК',
+      target: '#stack',
+      x: 0.74,
+      y: 0.623,
+      labelPos: 'right',
+    },
+    {
+      id: 'contact',
+      labelEN: 'CONTACT',
+      labelRU: 'КОНТАКТ',
+      target: '#contact',
+      x: 0.578,
+      y: 0.9,
+      labelPos: 'bottom',
+    },
   ];
 
   /** Growth config per nav node */
   interface GrowConfig {
-    baseAngle: number;    // primary direction (radians)
-    deviation: number;    // max deviation (radians)
+    baseAngle: number; // primary direction (radians)
+    deviation: number; // max deviation (radians)
     branchCount: number;
-    lineHue: number;      // line color hue
-    targets?: string[];   // if set, branches seek these targets (About only)
+    lineHue: number; // line color hue
+    targets?: string[]; // if set, branches seek these targets (About only)
   }
   const growConfig: Record<string, GrowConfig> = {
-    home:    { baseAngle: -Math.PI / 2,  deviation: Math.PI / 3,         branchCount: 2, lineHue: 155 },
-    lab:     { baseAngle: Math.PI,       deviation: Math.PI / 3,         branchCount: 2, lineHue: 155 },
-    stack:   { baseAngle: 0,             deviation: Math.PI / 3,         branchCount: 2, lineHue: 155 },
-    contact: { baseAngle: Math.PI / 2,   deviation: 80 * Math.PI / 180,  branchCount: 2, lineHue: 155 },
-    about:   { baseAngle: 0,             deviation: 0,                   branchCount: 4, lineHue: 220, targets: ['home', 'lab', 'stack', 'contact'] },
+    home: { baseAngle: -Math.PI / 2, deviation: Math.PI / 3, branchCount: 2, lineHue: 155 },
+    lab: { baseAngle: Math.PI, deviation: Math.PI / 3, branchCount: 2, lineHue: 155 },
+    stack: { baseAngle: 0, deviation: Math.PI / 3, branchCount: 2, lineHue: 155 },
+    contact: {
+      baseAngle: Math.PI / 2,
+      deviation: (80 * Math.PI) / 180,
+      branchCount: 2,
+      lineHue: 155,
+    },
+    about: {
+      baseAngle: 0,
+      deviation: 0,
+      branchCount: 4,
+      lineHue: 220,
+      targets: ['home', 'lab', 'stack', 'contact'],
+    },
     // Lang branch color configs (used for hue lookup only)
-    '__lang__':  { baseAngle: 0, deviation: Math.PI, branchCount: 0, lineHue: 155 },
-    '__lang_b__': { baseAngle: 0, deviation: Math.PI, branchCount: 0, lineHue: 220 },
+    __lang__: { baseAngle: 0, deviation: Math.PI, branchCount: 0, lineHue: 155 },
+    __lang_b__: { baseAngle: 0, deviation: Math.PI, branchCount: 0, lineHue: 220 },
   };
 
   const navMap: Record<string, NavItem> = Object.fromEntries(navItems.map((n) => [n.id, n]));
@@ -131,19 +189,24 @@
     return (n - Math.floor(n)) * 2 - 1;
   }
   function smoothNoise(x: number, y: number): number {
-    const ix = Math.floor(x), iy = Math.floor(y);
-    const fx = x - ix, fy = y - iy;
-    const sx = fx * fx * (3 - 2 * fx), sy = fy * fy * (3 - 2 * fy);
-    const a = noise2D(ix, iy), b = noise2D(ix + 1, iy);
-    const c = noise2D(ix, iy + 1), d = noise2D(ix + 1, iy + 1);
+    const ix = Math.floor(x),
+      iy = Math.floor(y);
+    const fx = x - ix,
+      fy = y - iy;
+    const sx = fx * fx * (3 - 2 * fx),
+      sy = fy * fy * (3 - 2 * fy);
+    const a = noise2D(ix, iy),
+      b = noise2D(ix + 1, iy);
+    const c = noise2D(ix, iy + 1),
+      d = noise2D(ix + 1, iy + 1);
     return a + (b - a) * sx + (c - a) * sy + (a - b - c + d) * sx * sy;
   }
 
   const MOUSE_LERP = 0.03;
   const CONNECTION_DIST = 140;
   const SPAWN_INTERVAL = 160;
-  const GROW_SPEED_ACTIVE = 1 / 200;   // progress per frame when active
-  const GROW_SPEED_SLOW = 1 / 1600;    // 8× slower when not active
+  const GROW_SPEED_ACTIVE = 1 / 200; // progress per frame when active
+  const GROW_SPEED_SLOW = 1 / 1600; // 8× slower when not active
   const MAX_NODES_PER_BRANCH = 16;
   const DRIFT_SPEED = 0.002;
   const DRIFT_AMP = 6;
@@ -164,11 +227,15 @@
   let sourceToGroupId: Map<string, number> = new Map();
 
   function findClosestBranch(px: number, py: number): number {
-    let best = 0, bestD = Infinity;
+    let best = 0,
+      bestD = Infinity;
     for (const n of plexNodes) {
       if (frameCount < n.born) continue;
       const d = (n.x - px) ** 2 + (n.y - py) ** 2;
-      if (d < bestD) { bestD = d; best = n.branch; }
+      if (d < bestD) {
+        bestD = d;
+        best = n.branch;
+      }
     }
     return best;
   }
@@ -207,27 +274,41 @@
         const seedIdx = plexNodes.length;
 
         plexNodes.push({
-          x: sx, y: sy,
+          x: sx,
+          y: sy,
           baseX: sx + Math.cos(angle) * seedDist,
           baseY: sy + Math.sin(angle) * seedDist,
-          born: frameCount + i * 30, branch: branchId, parentIdx: -1,
-          noiseOffX: Math.random() * 1000, noiseOffY: Math.random() * 1000,
-          growProgress: 1, lineWidth: 5 + Math.random() * 1,
-          targetNavId: targetId, sourceNavId: nodeId,
-          groupId: currentGroupId, isAnchor: false,
+          born: frameCount + i * 30,
+          branch: branchId,
+          parentIdx: -1,
+          noiseOffX: Math.random() * 1000,
+          noiseOffY: Math.random() * 1000,
+          growProgress: 1,
+          lineWidth: 5 + Math.random() * 1,
+          targetNavId: targetId,
+          sourceNavId: nodeId,
+          groupId: currentGroupId,
+          isAnchor: false,
         });
 
         const childDist = 55 + Math.random() * 45;
         const childAngle = angle + (Math.random() - 0.5) * 0.4;
         plexNodes.push({
-          x: sx, y: sy,
+          x: sx,
+          y: sy,
           baseX: sx + Math.cos(childAngle) * childDist,
           baseY: sy + Math.sin(childAngle) * childDist,
-          born: frameCount + i * 30 + 15, branch: branchId, parentIdx: seedIdx,
-          noiseOffX: Math.random() * 1000, noiseOffY: Math.random() * 1000,
-          growProgress: 0, lineWidth: 4.5 + Math.random() * 0.8,
-          targetNavId: targetId, sourceNavId: nodeId,
-          groupId: currentGroupId, isAnchor: false,
+          born: frameCount + i * 30 + 15,
+          branch: branchId,
+          parentIdx: seedIdx,
+          noiseOffX: Math.random() * 1000,
+          noiseOffY: Math.random() * 1000,
+          growProgress: 0,
+          lineWidth: 4.5 + Math.random() * 0.8,
+          targetNavId: targetId,
+          sourceNavId: nodeId,
+          groupId: currentGroupId,
+          isAnchor: false,
         });
         lastSpawn.set(branchId, frameCount + i * 30 + 15);
       }
@@ -242,27 +323,41 @@
         const seedIdx = plexNodes.length;
 
         plexNodes.push({
-          x: sx, y: sy,
+          x: sx,
+          y: sy,
           baseX: sx + Math.cos(angle) * seedDist,
           baseY: sy + Math.sin(angle) * seedDist,
-          born: frameCount + i * 40, branch: branchId, parentIdx: -1,
-          noiseOffX: Math.random() * 1000, noiseOffY: Math.random() * 1000,
-          growProgress: 1, lineWidth: 5 + Math.random() * 1,
-          targetNavId: '', sourceNavId: nodeId,
-          groupId: currentGroupId, isAnchor: false,
+          born: frameCount + i * 40,
+          branch: branchId,
+          parentIdx: -1,
+          noiseOffX: Math.random() * 1000,
+          noiseOffY: Math.random() * 1000,
+          growProgress: 1,
+          lineWidth: 5 + Math.random() * 1,
+          targetNavId: '',
+          sourceNavId: nodeId,
+          groupId: currentGroupId,
+          isAnchor: false,
         });
 
         const childDist = 55 + Math.random() * 45;
         const childAngle = angle + (Math.random() - 0.5) * 0.5;
         plexNodes.push({
-          x: sx, y: sy,
+          x: sx,
+          y: sy,
           baseX: sx + Math.cos(childAngle) * childDist,
           baseY: sy + Math.sin(childAngle) * childDist,
-          born: frameCount + i * 40 + 15, branch: branchId, parentIdx: seedIdx,
-          noiseOffX: Math.random() * 1000, noiseOffY: Math.random() * 1000,
-          growProgress: 0, lineWidth: 4.5 + Math.random() * 0.8,
-          targetNavId: '', sourceNavId: nodeId,
-          groupId: currentGroupId, isAnchor: false,
+          born: frameCount + i * 40 + 15,
+          branch: branchId,
+          parentIdx: seedIdx,
+          noiseOffX: Math.random() * 1000,
+          noiseOffY: Math.random() * 1000,
+          growProgress: 0,
+          lineWidth: 4.5 + Math.random() * 0.8,
+          targetNavId: '',
+          sourceNavId: nodeId,
+          groupId: currentGroupId,
+          isAnchor: false,
         });
         lastSpawn.set(branchId, frameCount + i * 40 + 15);
       }
@@ -275,7 +370,7 @@
     if (parent.isAnchor) return;
 
     const branch = parent.branch;
-    const branchNodes = plexNodes.filter(n => n.branch === branch);
+    const branchNodes = plexNodes.filter((n) => n.branch === branch);
     if (branchNodes.length >= MAX_NODES_PER_BRANCH) return;
 
     const config = growConfig[parent.sourceNavId];
@@ -293,12 +388,21 @@
 
       if (distToTarget < 120) {
         plexNodes.push({
-          x: parent.x, y: parent.y, baseX: tx, baseY: ty,
-          born: frameCount, branch, parentIdx,
-          noiseOffX: Math.random() * 1000, noiseOffY: Math.random() * 1000,
-          growProgress: 0, lineWidth: 2.5,
-          targetNavId: parent.targetNavId, sourceNavId: parent.sourceNavId,
-          groupId: parent.groupId, isAnchor: true,
+          x: parent.x,
+          y: parent.y,
+          baseX: tx,
+          baseY: ty,
+          born: frameCount,
+          branch,
+          parentIdx,
+          noiseOffX: Math.random() * 1000,
+          noiseOffY: Math.random() * 1000,
+          growProgress: 0,
+          lineWidth: 2.5,
+          targetNavId: parent.targetNavId,
+          sourceNavId: parent.sourceNavId,
+          groupId: parent.groupId,
+          isAnchor: true,
         });
         anchoredBranches.add(branch);
         reachedNavIds.add(parent.targetNavId);
@@ -306,44 +410,64 @@
       }
 
       const toTargetAngle = Math.atan2(ty - parent.baseY, tx - parent.baseX);
-      const prevAngle = parent.parentIdx >= 0
-        ? Math.atan2(parent.baseY - plexNodes[parent.parentIdx].baseY,
-                      parent.baseX - plexNodes[parent.parentIdx].baseX)
-        : toTargetAngle;
+      const prevAngle =
+        parent.parentIdx >= 0
+          ? Math.atan2(
+              parent.baseY - plexNodes[parent.parentIdx].baseY,
+              parent.baseX - plexNodes[parent.parentIdx].baseX
+            )
+          : toTargetAngle;
       const angle = toTargetAngle * 0.55 + prevAngle * 0.45 + (Math.random() - 0.5) * 0.9;
       const dist = 55 + Math.random() * 55;
 
       plexNodes.push({
-        x: parent.x, y: parent.y,
+        x: parent.x,
+        y: parent.y,
         baseX: Math.max(margin, Math.min(vw - margin, parent.baseX + Math.cos(angle) * dist)),
         baseY: Math.max(margin, Math.min(vh - margin, parent.baseY + Math.sin(angle) * dist)),
-        born: frameCount, branch, parentIdx,
-        noiseOffX: Math.random() * 1000, noiseOffY: Math.random() * 1000,
-        growProgress: 0, lineWidth: lw,
-        targetNavId: parent.targetNavId, sourceNavId: parent.sourceNavId,
-        groupId: parent.groupId, isAnchor: false,
+        born: frameCount,
+        branch,
+        parentIdx,
+        noiseOffX: Math.random() * 1000,
+        noiseOffY: Math.random() * 1000,
+        growProgress: 0,
+        lineWidth: lw,
+        targetNavId: parent.targetNavId,
+        sourceNavId: parent.sourceNavId,
+        groupId: parent.groupId,
+        isAnchor: false,
       });
 
       if (Math.random() < 0.45 && depth < MAX_NODES_PER_BRANCH - 1) {
         const fa = angle + (Math.random() > 0.5 ? 1 : -1) * (0.4 + Math.random() * 0.5);
         const fd = 40 + Math.random() * 45;
         plexNodes.push({
-          x: parent.x, y: parent.y,
+          x: parent.x,
+          y: parent.y,
           baseX: Math.max(margin, Math.min(vw - margin, parent.baseX + Math.cos(fa) * fd)),
           baseY: Math.max(margin, Math.min(vh - margin, parent.baseY + Math.sin(fa) * fd)),
-          born: frameCount + 50, branch, parentIdx,
-          noiseOffX: Math.random() * 1000, noiseOffY: Math.random() * 1000,
-          growProgress: 0, lineWidth: Math.max(1.5, lw - 0.4),
-          targetNavId: parent.targetNavId, sourceNavId: parent.sourceNavId,
-          groupId: parent.groupId, isAnchor: false,
+          born: frameCount + 50,
+          branch,
+          parentIdx,
+          noiseOffX: Math.random() * 1000,
+          noiseOffY: Math.random() * 1000,
+          growProgress: 0,
+          lineWidth: Math.max(1.5, lw - 0.4),
+          targetNavId: parent.targetNavId,
+          sourceNavId: parent.sourceNavId,
+          groupId: parent.groupId,
+          isAnchor: false,
         });
       }
     } else {
       // Directional growth (HOME/LAB/STACK/CONTACT) or post-anchor branching
-      const prevAngle = parent.parentIdx >= 0
-        ? Math.atan2(parent.baseY - plexNodes[parent.parentIdx].baseY,
-                      parent.baseX - plexNodes[parent.parentIdx].baseX)
-        : config.baseAngle;
+      const prevAngle =
+        parent.parentIdx >= 0
+          ? Math.atan2(
+              parent.baseY - plexNodes[parent.parentIdx].baseY,
+              parent.baseX - plexNodes[parent.parentIdx].baseX
+            )
+          : config.baseAngle;
 
       // Clamp angle within the allowed cone
       let angle = prevAngle + (Math.random() - 0.5) * 1.2;
@@ -357,14 +481,21 @@
 
       const dist = 50 + Math.random() * 55;
       plexNodes.push({
-        x: parent.x, y: parent.y,
+        x: parent.x,
+        y: parent.y,
         baseX: Math.max(margin, Math.min(vw - margin, parent.baseX + Math.cos(angle) * dist)),
         baseY: Math.max(margin, Math.min(vh - margin, parent.baseY + Math.sin(angle) * dist)),
-        born: frameCount, branch, parentIdx,
-        noiseOffX: Math.random() * 1000, noiseOffY: Math.random() * 1000,
-        growProgress: 0, lineWidth: lw,
-        targetNavId: parent.targetNavId, sourceNavId: parent.sourceNavId,
-        groupId: parent.groupId, isAnchor: false,
+        born: frameCount,
+        branch,
+        parentIdx,
+        noiseOffX: Math.random() * 1000,
+        noiseOffY: Math.random() * 1000,
+        growProgress: 0,
+        lineWidth: lw,
+        targetNavId: parent.targetNavId,
+        sourceNavId: parent.sourceNavId,
+        groupId: parent.groupId,
+        isAnchor: false,
       });
 
       // 45% fork
@@ -378,14 +509,21 @@
         }
         const fd = 40 + Math.random() * 45;
         plexNodes.push({
-          x: parent.x, y: parent.y,
+          x: parent.x,
+          y: parent.y,
           baseX: Math.max(margin, Math.min(vw - margin, parent.baseX + Math.cos(fa) * fd)),
           baseY: Math.max(margin, Math.min(vh - margin, parent.baseY + Math.sin(fa) * fd)),
-          born: frameCount + 50, branch, parentIdx,
-          noiseOffX: Math.random() * 1000, noiseOffY: Math.random() * 1000,
-          growProgress: 0, lineWidth: Math.max(1.5, lw - 0.4),
-          targetNavId: parent.targetNavId, sourceNavId: parent.sourceNavId,
-          groupId: parent.groupId, isAnchor: false,
+          born: frameCount + 50,
+          branch,
+          parentIdx,
+          noiseOffX: Math.random() * 1000,
+          noiseOffY: Math.random() * 1000,
+          growProgress: 0,
+          lineWidth: Math.max(1.5, lw - 0.4),
+          targetNavId: parent.targetNavId,
+          sourceNavId: parent.sourceNavId,
+          groupId: parent.groupId,
+          isAnchor: false,
         });
       }
     }
@@ -428,15 +566,21 @@
         const idx = plexNodes.length;
 
         plexNodes.push({
-          x: sx, y: sy,
-          baseX: nx, baseY: ny,
+          x: sx,
+          y: sy,
+          baseX: nx,
+          baseY: ny,
           born: frameCount + stagger + i * 12,
-          branch: branchId, parentIdx: prevIdx === -1 ? -1 : prevIdx,
-          noiseOffX: Math.random() * 1000, noiseOffY: Math.random() * 1000,
+          branch: branchId,
+          parentIdx: prevIdx === -1 ? -1 : prevIdx,
+          noiseOffX: Math.random() * 1000,
+          noiseOffY: Math.random() * 1000,
           growProgress: prevIdx === -1 ? 1 : 0,
           lineWidth: Math.max(1.5, 2.2 - i * 0.15),
-          targetNavId: targetId, sourceNavId: srcId,
-          groupId: gid, isAnchor: i === steps - 1,
+          targetNavId: targetId,
+          sourceNavId: srcId,
+          groupId: gid,
+          isAnchor: i === steps - 1,
         });
         prevIdx = idx;
       }
@@ -479,20 +623,24 @@
     }
 
     // === 1) SPAWN — new nodes per branch ===
-    const branches = new Set(plexNodes.map(n => n.branch));
+    const branches = new Set(plexNodes.map((n) => n.branch));
     for (const b of branches) {
       // Lang branches are static connections — don't spawn new nodes
-      const sampleNode = plexNodes.find(n => n.branch === b);
-      if (sampleNode && (sampleNode.sourceNavId === '__lang__' || sampleNode.sourceNavId === '__lang_b__')) continue;
+      const sampleNode = plexNodes.find((n) => n.branch === b);
+      if (
+        sampleNode &&
+        (sampleNode.sourceNavId === '__lang__' || sampleNode.sourceNavId === '__lang_b__')
+      )
+        continue;
 
       const ls = lastSpawn.get(b) ?? 0;
       if (frameCount - ls >= SPAWN_INTERVAL) {
-        const bNodes = plexNodes.filter(n => n.branch === b && frameCount >= n.born);
+        const bNodes = plexNodes.filter((n) => n.branch === b && frameCount >= n.born);
         if (bNodes.length === 0) continue;
 
         if (anchoredBranches.has(b)) {
           // Branch reached target → pick a random non-anchor settled node to fork from
-          const eligible = bNodes.filter(n => !n.isAnchor && n.growProgress >= 0.9);
+          const eligible = bNodes.filter((n) => !n.isAnchor && n.growProgress >= 0.9);
           if (eligible.length > 0) {
             const pick = eligible[Math.floor(Math.random() * eligible.length)];
             spawnNode(plexNodes.indexOf(pick), w, h);
@@ -515,8 +663,11 @@
 
       // Speed: lang branches 1.8× faster, active group fast, others 8× slower
       const isLangBranch = node.sourceNavId === '__lang__' || node.sourceNavId === '__lang_b__';
-      const speed = isLangBranch ? GROW_SPEED_ACTIVE * 1.8
-        : (node.groupId === activeGroupId ? GROW_SPEED_ACTIVE : GROW_SPEED_SLOW);
+      const speed = isLangBranch
+        ? GROW_SPEED_ACTIVE * 1.8
+        : node.groupId === activeGroupId
+          ? GROW_SPEED_ACTIVE
+          : GROW_SPEED_SLOW;
 
       if (node.growProgress < 1) {
         node.growProgress = Math.min(1, node.growProgress + speed);
@@ -567,9 +718,7 @@
       const mDist = Math.sqrt((mx - midX) ** 2 + (my - midY) ** 2);
       const glow = mDist < 200 ? (1 - mDist / 200) * 0.3 : 0;
 
-      const baseAlpha = isActive
-        ? (isNear ? 0.30 : 0.18)
-        : (isNear ? 0.12 : 0.06);
+      const baseAlpha = isActive ? (isNear ? 0.3 : 0.18) : isNear ? 0.12 : 0.06;
       const alpha = baseAlpha + glow;
 
       ctx.beginPath();
@@ -599,7 +748,9 @@
           const dist = Math.sqrt(distSq);
           const proximity = 1 - dist / CONNECTION_DIST;
           const midX = (plexNodes[i].x + plexNodes[j].x) / 2;
-          const mDist = Math.sqrt((mx - midX) ** 2 + (my - (plexNodes[i].y + plexNodes[j].y) / 2) ** 2);
+          const mDist = Math.sqrt(
+            (mx - midX) ** 2 + (my - (plexNodes[i].y + plexNodes[j].y) / 2) ** 2
+          );
           const glow = mDist < 180 ? (1 - mDist / 180) * 0.18 : 0;
           const hue = plexNodes[i].sourceNavId === 'about' ? 220 : 155;
 
@@ -670,23 +821,35 @@
         let dotR: number, dotGlowR: number, dotHue: number, dotLight: number, dotAlpha: number;
 
         if (isHov) {
-        dotR = 14; dotGlowR = 40; dotHue = 210; dotLight = 72; dotAlpha = 1;
-      } else if (isLit) {
-        dotR = 12; dotGlowR = 32; dotHue = 215; dotLight = 68; dotAlpha = 0.9;
-      } else {
-        const breathe = Math.sin(frameCount * 0.025 + idx * 1.3);
-        dotR = 14 + breathe * 4;
-        dotGlowR = 28 + breathe * 8;
-        dotHue = 215;
-        dotLight = videoEnded ? 72 : 60 + breathe * 6;
-        dotAlpha = videoEnded ? (0.85 + breathe * 0.1) : (0.55 + breathe * 0.15);
-      }
+          dotR = 14;
+          dotGlowR = 40;
+          dotHue = 210;
+          dotLight = 72;
+          dotAlpha = 1;
+        } else if (isLit) {
+          dotR = 12;
+          dotGlowR = 32;
+          dotHue = 215;
+          dotLight = 68;
+          dotAlpha = 0.9;
+        } else {
+          const breathe = Math.sin(frameCount * 0.025 + idx * 1.3);
+          dotR = 14 + breathe * 4;
+          dotGlowR = 28 + breathe * 8;
+          dotHue = 215;
+          dotLight = videoEnded ? 72 : 60 + breathe * 6;
+          dotAlpha = videoEnded ? 0.85 + breathe * 0.1 : 0.55 + breathe * 0.15;
+        }
 
         // Glow halo
         ctx.beginPath();
         ctx.arc(nx, ny, dotGlowR, 0, Math.PI * 2);
         const grad = ctx.createRadialGradient(nx, ny, 0, nx, ny, dotGlowR);
-        const glowAlpha = isHov ? 0.35 : isLit ? 0.2 : (videoEnded ? 0.18 : 0.06) + Math.sin(frameCount * 0.025 + idx * 1.3) * 0.04;
+        const glowAlpha = isHov
+          ? 0.35
+          : isLit
+            ? 0.2
+            : (videoEnded ? 0.18 : 0.06) + Math.sin(frameCount * 0.025 + idx * 1.3) * 0.04;
         grad.addColorStop(0, `hsla(${dotHue}, 70%, 60%, ${glowAlpha})`);
         grad.addColorStop(1, `hsla(${dotHue}, 70%, 60%, 0)`);
         ctx.fillStyle = grad;
@@ -730,66 +893,75 @@
 
         // Labels — all buttons after video ended
         if (videoEnded) {
-        const fontSize = isHov ? 20 : 16;
-        ctx.font = `500 ${fontSize}px 'JetBrains Mono', 'SF Mono', monospace`;
+          const fontSize = isHov ? 20 : 16;
+          ctx.font = `500 ${fontSize}px 'JetBrains Mono', 'SF Mono', monospace`;
 
-        const gap = isHov ? 20 : 16;
-        let lx = nx, ly = ny;
+          const gap = isHov ? 20 : 16;
+          let lx = nx,
+            ly = ny;
 
-        switch (item.labelPos) {
-          case 'top':
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'bottom';
-            ly = ny - gap;
-            break;
-          case 'bottom':
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'top';
-            ly = ny + gap;
-            break;
-          case 'left':
-            ctx.textAlign = 'right';
-            ctx.textBaseline = 'middle';
-            lx = nx - gap;
-            break;
-          case 'right':
-            ctx.textAlign = 'left';
-            ctx.textBaseline = 'middle';
-            lx = nx + gap;
-            break;
+          switch (item.labelPos) {
+            case 'top':
+              ctx.textAlign = 'center';
+              ctx.textBaseline = 'bottom';
+              ly = ny - gap;
+              break;
+            case 'bottom':
+              ctx.textAlign = 'center';
+              ctx.textBaseline = 'top';
+              ly = ny + gap;
+              break;
+            case 'left':
+              ctx.textAlign = 'right';
+              ctx.textBaseline = 'middle';
+              lx = nx - gap;
+              break;
+            case 'right':
+              ctx.textAlign = 'left';
+              ctx.textBaseline = 'middle';
+              lx = nx + gap;
+              break;
+          }
+
+          // Glassmorphism background for About
+          if (item.labelBg) {
+            const metrics = ctx.measureText(lbl);
+            const tw = metrics.width;
+            const th = fontSize;
+            const padX = 10,
+              padY = 6,
+              radius = 6;
+            let bgX = lx - tw / 2 - padX;
+            let bgY = ly - padY;
+            if (item.labelPos === 'top') bgY = ly - th - padY;
+            if (item.labelPos === 'left') {
+              bgX = lx - tw - padX;
+              bgY = ly - th / 2 - padY;
+            }
+            if (item.labelPos === 'right') {
+              bgX = lx - padX;
+              bgY = ly - th / 2 - padY;
+            }
+            const bgW = tw + padX * 2;
+            const bgH = th + padY * 2;
+
+            ctx.beginPath();
+            ctx.roundRect(bgX, bgY, bgW, bgH, radius);
+            ctx.fillStyle = `hsla(210, 60%, 25%, ${isHov ? 0.55 : 0.35})`;
+            ctx.fill();
+            ctx.strokeStyle = `hsla(210, 50%, 45%, ${isHov ? 0.3 : 0.15})`;
+            ctx.lineWidth = 1;
+            ctx.stroke();
+          }
+
+          ctx.shadowColor = `hsla(${hue}, 70%, 60%, ${isHov ? 0.7 : 0.4})`;
+          ctx.shadowBlur = isHov ? 20 : 12;
+          ctx.fillStyle = `hsla(0, 0%, 100%, ${isHov ? 1 : 0.92})`;
+          ctx.fillText(lbl, lx, ly);
+          ctx.shadowColor = 'transparent';
+          ctx.shadowBlur = 0;
         }
-
-        // Glassmorphism background for About
-        if (item.labelBg) {
-          const metrics = ctx.measureText(lbl);
-          const tw = metrics.width;
-          const th = fontSize;
-          const padX = 10, padY = 6, radius = 6;
-          let bgX = lx - tw / 2 - padX;
-          let bgY = ly - padY;
-          if (item.labelPos === 'top') bgY = ly - th - padY;
-          if (item.labelPos === 'left') { bgX = lx - tw - padX; bgY = ly - th / 2 - padY; }
-          if (item.labelPos === 'right') { bgX = lx - padX; bgY = ly - th / 2 - padY; }
-          const bgW = tw + padX * 2;
-          const bgH = th + padY * 2;
-
-          ctx.beginPath();
-          ctx.roundRect(bgX, bgY, bgW, bgH, radius);
-          ctx.fillStyle = `hsla(210, 60%, 25%, ${isHov ? 0.55 : 0.35})`;
-          ctx.fill();
-          ctx.strokeStyle = `hsla(210, 50%, 45%, ${isHov ? 0.3 : 0.15})`;
-          ctx.lineWidth = 1;
-          ctx.stroke();
-        }
-
-        ctx.shadowColor = `hsla(${hue}, 70%, 60%, ${isHov ? 0.7 : 0.4})`;
-        ctx.shadowBlur = isHov ? 20 : 12;
-        ctx.fillStyle = `hsla(0, 0%, 100%, ${isHov ? 1 : 0.92})`;
-        ctx.fillText(lbl, lx, ly);
-        ctx.shadowColor = 'transparent';
-        ctx.shadowBlur = 0;
-      }
-    } // end for navItems
+      } // end for navItems
     } // end if !videoPlaying || videoEnded
 
     // === 5) BINARY STAR — LANGUAGE SWITCHER (Eclipsing Binary) ===
@@ -822,7 +994,7 @@
       ctx.arc(lcx, lcy, orbitR, 0, Math.PI * 2);
       ctx.setLineDash([4, 6]);
       ctx.lineDashOffset = -frameCount * 0.5;
-      ctx.strokeStyle = `hsla(185, 50%, 55%, ${isLangHov ? 0.20 : 0.10})`;
+      ctx.strokeStyle = `hsla(185, 50%, 55%, ${isLangHov ? 0.2 : 0.1})`;
       ctx.lineWidth = 1;
       ctx.stroke();
       ctx.setLineDash([]);
@@ -867,8 +1039,15 @@
 
       // --- Companion star (large, semi-transparent, text inside) ---
       // Outer glow
-      const compGlow = ctx.createRadialGradient(compX, compY, compR * 0.5, compX, compY, compR + 14);
-      compGlow.addColorStop(0, `hsla(210, 60%, 55%, ${isLangHov ? 0.22 : 0.10})`);
+      const compGlow = ctx.createRadialGradient(
+        compX,
+        compY,
+        compR * 0.5,
+        compX,
+        compY,
+        compR + 14
+      );
+      compGlow.addColorStop(0, `hsla(210, 60%, 55%, ${isLangHov ? 0.22 : 0.1})`);
       compGlow.addColorStop(1, `hsla(210, 60%, 55%, 0)`);
       ctx.beginPath();
       ctx.arc(compX, compY, compR + 14, 0, Math.PI * 2);
@@ -880,7 +1059,7 @@
       ctx.fillStyle = `hsla(210, 35%, 18%, ${isLangHov ? 0.75 : 0.55})`;
       ctx.fill();
       // Border
-      ctx.strokeStyle = `hsla(185, 55%, 55%, ${isLangHov ? 0.50 : 0.20})`;
+      ctx.strokeStyle = `hsla(185, 55%, 55%, ${isLangHov ? 0.5 : 0.2})`;
       ctx.lineWidth = isLangHov ? 1.5 : 1;
       ctx.stroke();
       // Text label inside
@@ -1032,19 +1211,26 @@
       const ny = item.y * rect.height;
       const dx = e.clientX - rect.left - nx;
       const dy = e.clientY - rect.top - ny;
-      if (Math.sqrt(dx * dx + dy * dy) < hitR) { found = item.id; break; }
+      if (Math.sqrt(dx * dx + dy * dy) < hitR) {
+        found = item.id;
+        break;
+      }
     }
 
     // Binary Star hover detection (50px hitbox around center)
     const langCX = langNode.cx * rect.width;
     const langCY = langNode.cy * rect.height;
-    const langDist = Math.sqrt((e.clientX - rect.left - langCX) ** 2 + (e.clientY - rect.top - langCY) ** 2);
+    const langDist = Math.sqrt(
+      (e.clientX - rect.left - langCX) ** 2 + (e.clientY - rect.top - langCY) ** 2
+    );
     isLangHov = langDist < 50;
 
     // Build Log node hover detection (50px hitbox around center)
     const logCX = logNode.cx * rect.width;
     const logCY = logNode.cy * rect.height;
-    const logDist = Math.sqrt((e.clientX - rect.left - logCX) ** 2 + (e.clientY - rect.top - logCY) ** 2);
+    const logDist = Math.sqrt(
+      (e.clientX - rect.left - logCX) ** 2 + (e.clientY - rect.top - logCY) ** 2
+    );
     isLogHov = logDist < 50;
 
     hoveredNode = found;
@@ -1056,7 +1242,9 @@
           videoPlaying = true;
           videoEl.currentTime = 0;
           videoEl.playbackRate = 3.5;
-          videoEl.play().catch(() => { /* autoplay blocked */ });
+          videoEl.play().catch(() => {
+            /* autoplay blocked */
+          });
         }
 
         if (videoEnded) {
@@ -1110,9 +1298,11 @@
   // ── Navigation ─────────────────────────────────────────────
 
   function navigateTo(target: string): void {
-    const lenis = (window as Window & {
-      lenisInstance?: { scrollTo: (t: string, o?: Record<string, unknown>) => void };
-    }).lenisInstance;
+    const lenis = (
+      window as Window & {
+        lenisInstance?: { scrollTo: (t: string, o?: Record<string, unknown>) => void };
+      }
+    ).lenisInstance;
     if (lenis) lenis.scrollTo(target, { duration: 2 });
     else document.querySelector(target)?.scrollIntoView({ behavior: 'smooth' });
     onClose();
@@ -1145,7 +1335,10 @@
       videoEl.pause();
       videoEl.currentTime = 0;
     }
-    if (animFrameId !== null) { cancelAnimationFrame(animFrameId); animFrameId = null; }
+    if (animFrameId !== null) {
+      cancelAnimationFrame(animFrameId);
+      animFrameId = null;
+    }
     window.dispatchEvent(new CustomEvent('vkv:constellation-close'));
   }
 
@@ -1202,7 +1395,8 @@
   $effect(() => {
     function handleToggle(e: Event): void {
       const detail = (e as CustomEvent<{ open: boolean }>).detail;
-      if (detail.open) openNav(); else onClose();
+      if (detail.open) openNav();
+      else onClose();
     }
     window.addEventListener('vkv:constellation-toggle', handleToggle);
     return () => window.removeEventListener('vkv:constellation-toggle', handleToggle);
@@ -1210,21 +1404,76 @@
 
   $effect(() => {
     if (!isOpen) return;
-    function onKey(e: KeyboardEvent): void { if (e.key === 'Escape') onClose(); }
+
+    // Full modal focus management, not just Escape. The overlay is
+    // role="dialog" aria-modal="true", so a keyboard user must be moved INTO
+    // it, kept inside it on Tab, and returned to the trigger on close —
+    // otherwise Tab walks straight out of the modal into the page hidden
+    // behind it. Same pattern SynapseTerminal already uses.
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+
+    const focusables = (): HTMLElement[] => {
+      if (!overlayEl) return [];
+      return Array.from(
+        overlayEl.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        )
+      ).filter((el) => el.offsetParent !== null);
+    };
+
+    // Move focus off the trigger and into the dialog.
+    requestAnimationFrame(() => {
+      focusables()[0]?.focus();
+    });
+
+    function onKey(e: KeyboardEvent): void {
+      if (e.key === 'Escape') {
+        onClose();
+        return;
+      }
+      if (e.key !== 'Tab' || !overlayEl) return;
+      const items = focusables();
+      if (items.length === 0) return;
+      const first = items[0];
+      const last = items[items.length - 1];
+      const active = document.activeElement as HTMLElement | null;
+      if (!overlayEl.contains(active)) {
+        e.preventDefault();
+        first.focus();
+      } else if (e.shiftKey && active === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && active === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    }
+
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      // Return focus to whatever opened the menu.
+      if (previouslyFocused && typeof previouslyFocused.focus === 'function') {
+        previouslyFocused.focus();
+      }
+    };
   });
 
   $effect(() => {
     if (!isOpen) return;
-    function onResize(): void { setupCanvas(); }
+    function onResize(): void {
+      setupCanvas();
+    }
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
   });
 
   $effect(() => {
     return () => {
-      if (animFrameId !== null) { cancelAnimationFrame(animFrameId); animFrameId = null; }
+      if (animFrameId !== null) {
+        cancelAnimationFrame(animFrameId);
+        animFrameId = null;
+      }
     };
   });
 </script>
@@ -1250,7 +1499,11 @@
       muted
       playsinline
       preload="auto"
-      onended={() => { videoEnded = true; videoPlayedOnce = true; videoSlowed = false; }}
+      onended={() => {
+        videoEnded = true;
+        videoPlayedOnce = true;
+        videoSlowed = false;
+      }}
       ontimeupdate={() => {
         if (!videoSlowed && videoEl && videoEl.duration) {
           const progress = videoEl.currentTime / videoEl.duration;
@@ -1267,12 +1520,7 @@
       <picture>
         <source srcset="/menu-end-frame.avif" type="image/avif" />
         <source srcset="/menu-end-frame.webp" type="image/webp" />
-        <img
-          class="brain-video"
-          src="/menu-end-frame.jpg"
-          alt=""
-          aria-hidden="true"
-        />
+        <img class="brain-video" src="/menu-end-frame.jpg" alt="" aria-hidden="true" />
       </picture>
     {/if}
 
@@ -1282,10 +1530,20 @@
       <button
         class="a11y-btn"
         style="left: {item.x * 100}%; top: {item.y * 100}%;"
-        aria-label={t(lang, 'nav.navigateTo').replace('{label}', lang === 'ru' ? item.labelRU : item.labelEN)}
-        onfocus={() => { hoveredNode = item.id; }}
-        onblur={() => { hoveredNode = null; }}
-        onclick={(e) => { e.stopPropagation(); navigateTo(item.target); }}
+        aria-label={t(lang, 'nav.navigateTo').replace(
+          '{label}',
+          lang === 'ru' ? item.labelRU : item.labelEN
+        )}
+        onfocus={() => {
+          hoveredNode = item.id;
+        }}
+        onblur={() => {
+          hoveredNode = null;
+        }}
+        onclick={(e) => {
+          e.stopPropagation();
+          navigateTo(item.target);
+        }}
       ></button>
     {/each}
 
@@ -1293,14 +1551,36 @@
       class="a11y-btn"
       style="left: {logNode.cx * 100}%; top: {logNode.cy * 100}%;"
       aria-label={lang === 'ru' ? 'Открыть журнал сборки' : 'Open Build Log'}
-      onfocus={() => { isLogHov = true; }}
-      onblur={() => { isLogHov = false; }}
-      onclick={(e) => { e.stopPropagation(); triggerLogNav(); }}
+      onfocus={() => {
+        isLogHov = true;
+      }}
+      onblur={() => {
+        isLogHov = false;
+      }}
+      onclick={(e) => {
+        e.stopPropagation();
+        triggerLogNav();
+      }}
     ></button>
 
-    <button class="close-btn" aria-label={t(lang, 'nav.closeMenu')} onclick={(e) => { e.stopPropagation(); onClose(); }}>
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-           stroke-width="1.5" stroke-linecap="round" aria-hidden="true">
+    <button
+      class="close-btn"
+      aria-label={t(lang, 'nav.closeMenu')}
+      onclick={(e) => {
+        e.stopPropagation();
+        onClose();
+      }}
+    >
+      <svg
+        width="18"
+        height="18"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.5"
+        stroke-linecap="round"
+        aria-hidden="true"
+      >
         <path d="M18 6 6 18" /><path d="m6 6 12 12" />
       </svg>
     </button>
@@ -1337,49 +1617,97 @@
 
 <style>
   .overlay {
-    position: fixed; inset: 0; z-index: 1000;
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
     background: hsl(220, 20%, 3%);
     cursor: crosshair;
     animation: fade-in 0.3s ease both;
   }
-  @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
 
   /* `<picture>` is inline by default — make it a transparent wrapper so the
      absolutely-positioned end-frame `<img>` inside lays out exactly as before. */
-  picture { display: contents; }
+  picture {
+    display: contents;
+  }
 
-  .nav-canvas { position: absolute; inset: 0; z-index: 5; }
-  @media (max-width: 767px) { .nav-canvas { display: none; } }
+  .nav-canvas {
+    position: absolute;
+    inset: 0;
+    z-index: 5;
+  }
+  @media (max-width: 767px) {
+    .nav-canvas {
+      display: none;
+    }
+  }
 
   .brain-video {
-    position: absolute; inset: 0;
-    width: 100%; height: 100%;
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
     object-fit: fill;
     z-index: 0;
     pointer-events: none;
   }
-  @media (max-width: 767px) { .brain-video { display: none; } }
+  @media (max-width: 767px) {
+    .brain-video {
+      display: none;
+    }
+  }
 
   .a11y-btn {
-    position: absolute; transform: translate(-50%, -50%);
-    width: 70px; height: 50px;
-    background: none; border: none; cursor: pointer; opacity: 0; z-index: 10;
+    position: absolute;
+    transform: translate(-50%, -50%);
+    width: 70px;
+    height: 50px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    opacity: 0;
+    z-index: 10;
   }
   .a11y-btn:focus-visible {
-    opacity: 1; outline: 2px solid hsla(155, 70%, 50%, 0.5);
-    outline-offset: 4px; border-radius: 4px;
+    opacity: 1;
+    outline: 2px solid hsla(155, 70%, 50%, 0.5);
+    outline-offset: 4px;
+    border-radius: 4px;
   }
-  @media (max-width: 767px) { .a11y-btn { display: none; } }
+  @media (max-width: 767px) {
+    .a11y-btn {
+      display: none;
+    }
+  }
 
   .close-btn {
-    position: absolute; top: 20px; right: 20px; z-index: 10;
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    z-index: 10;
     background: hsla(220, 20%, 12%, 0.5);
     border: 1px solid hsla(220, 15%, 30%, 0.3);
-    border-radius: 50%; width: 40px; height: 40px;
-    display: flex; align-items: center; justify-content: center;
-    cursor: pointer; color: hsla(0, 0%, 100%, 0.4);
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: hsla(0, 0%, 100%, 0.4);
     backdrop-filter: blur(8px);
-    transition: color 0.25s ease, border-color 0.25s ease, transform 0.25s ease;
+    transition:
+      color 0.25s ease,
+      border-color 0.25s ease,
+      transform 0.25s ease;
   }
   .close-btn:hover {
     color: hsl(155, 70%, 60%);
@@ -1388,22 +1716,35 @@
   }
 
   .mobile-nav {
-    display: none; flex-direction: column;
-    align-items: center; justify-content: center; height: 100%;
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
   }
-  @media (max-width: 767px) { .mobile-nav { display: flex; } }
+  @media (max-width: 767px) {
+    .mobile-nav {
+      display: flex;
+    }
+  }
 
   .mobile-item {
     font-family: var(--font-mono, 'JetBrains Mono', monospace);
-    font-size: 18px; font-weight: 500;
-    letter-spacing: 0.18em; text-transform: uppercase;
+    font-size: 18px;
+    font-weight: 500;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
     color: hsla(0, 0%, 100%, 0.45);
-    background: none; border: none; cursor: pointer;
+    background: none;
+    border: none;
+    cursor: pointer;
     padding: 18px 24px;
     animation: stagger-in 0.4s ease both;
     transition: color 0.2s ease;
   }
-  .mobile-item:hover { color: hsl(155, 70%, 60%); }
+  .mobile-item:hover {
+    color: hsl(155, 70%, 60%);
+  }
 
   /* ── Binary Star mobile lang switch ──────────────────────── */
   .lang-switch-mobile {
@@ -1422,7 +1763,9 @@
     align-items: center;
     gap: 8px;
     animation: stagger-in 0.4s ease both;
-    transition: border-color 0.25s ease, box-shadow 0.25s ease;
+    transition:
+      border-color 0.25s ease,
+      box-shadow 0.25s ease;
   }
   .lang-switch-mobile:hover {
     border-color: hsla(210, 60%, 55%, 0.4);
@@ -1439,14 +1782,29 @@
   }
 
   @keyframes stagger-in {
-    from { opacity: 0; transform: translateY(12px); }
-    to   { opacity: 1; transform: translateY(0); }
+    from {
+      opacity: 0;
+      transform: translateY(12px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .overlay { animation: none; }
-    .mobile-item { animation: none; opacity: 1; }
-    .nav-canvas { display: none; }
-    .mobile-nav { display: flex !important; }
+    .overlay {
+      animation: none;
+    }
+    .mobile-item {
+      animation: none;
+      opacity: 1;
+    }
+    .nav-canvas {
+      display: none;
+    }
+    .mobile-nav {
+      display: flex !important;
+    }
   }
 </style>

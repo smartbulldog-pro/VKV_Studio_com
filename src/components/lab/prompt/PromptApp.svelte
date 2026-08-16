@@ -166,7 +166,13 @@
       .replace('{preset}', t(lang, outputPresetLabelKey))
   );
 
-  let estimatedCostOut = $derived(calculateOutputCost(expectedOutputTokens, selectedModel));
+  // `billedInputTokens` is passed because a long-context pricing tier is
+  // triggered by the size of the PROMPT and then reprices the output too:
+  // Gemini 3.1 Pro's output goes $12 → $18 once the prompt passes 200k, and
+  // nothing about the output itself says so.
+  let estimatedCostOut = $derived(
+    calculateOutputCost(expectedOutputTokens, selectedModel, billedInputTokens)
+  );
 
   // ─── Cache-aware cost ──────────────────────────────────────────────────────
   // Sums use `block.tokens`, which already reflect the active `countMode`
@@ -269,6 +275,21 @@
   // otherwise be a read+write-in-$effect trap if they were reactive.
   let lastCalcModel = modelId;
   let lastCalcContents: Record<string, string> = {};
+  /**
+   * Each block's accuracy from the run that last counted it, kept because the
+   * verdict is about the WHOLE prompt and most runs only recount one block.
+   *
+   * Without this the badge lied by forgetting. The verdict was computed from
+   * the blocks touched by the current run alone, and blocks skipped as
+   * unchanged were excluded on the reasoning that they "cannot upgrade the
+   * verdict" — but excluding them is precisely what let them be upgraded.
+   * Count an exact block and an approximated one: verdict "approx", correctly.
+   * Now edit only the exact one. The next run recounts that block by itself,
+   * finds it exact, and stamps the total "exact" while half of it is still a
+   * cl100k stand-in. Reproduced on the live site. Parallel to
+   * `lastCalcContents`, and maintained by the same delete/clone paths below.
+   */
+  let lastCalcAccuracy: Record<string, 'exact' | 'approx'> = {};
   let latestRequestId = 0;
   // Race-condition guard, mirrors TokenizerApp.svelte's activeController
   // pattern: a run's in-flight API tokenize calls (see countTokens's signal
@@ -327,18 +348,24 @@
           const idx = blocks.findIndex((b) => b.id === res.id);
           if (idx !== -1) blocks[idx].tokens = res.tokens;
           lastCalcContents[res.id] = res.text;
+          if (res.accuracy !== null) lastCalcAccuracy[res.id] = res.accuracy;
         }
         lastCalcModel = model.id;
         // The whole total is only as exact as its least exact part: one
         // approximated block makes the sum — and the cost derived from it — an
-        // approximation too. Blocks that were skipped as unchanged carry no
-        // accuracy of their own, so they cannot upgrade the verdict.
-        const counted = results.filter((r) => r.accuracy !== null);
-        countAccuracy = counted.length === 0
-          ? countAccuracy
-          : counted.every((r) => r.accuracy !== 'approx')
-            ? 'exact'
-            : 'approx';
+        // approximation too. Judged over every block in the prompt, using each
+        // one's remembered verdict, not only over the blocks this run happened
+        // to recount. A block with no remembered verdict has never been
+        // counted, so it cannot vouch for anything either.
+        const known = snapshot
+          .map((b) => lastCalcAccuracy[b.id])
+          .filter((a): a is 'exact' | 'approx' => a !== undefined);
+        countAccuracy =
+          known.length === 0
+            ? countAccuracy
+            : known.every((a) => a === 'exact')
+              ? 'exact'
+              : 'approx';
       }
       // Only after a run has actually completed: an aborted or superseded first
       // attempt must not convince the next one that the page is warm.
@@ -429,6 +456,7 @@
     if (blocks.length <= 1) return;
     blocks = blocks.filter((b) => b.id !== id);
     delete lastCalcContents[id]; // avoid unbounded growth of the tokenize memo
+    delete lastCalcAccuracy[id];
   }
 
   function duplicateBlock(id: string) {
@@ -442,6 +470,9 @@
     // Clone starts with the same content/tokens as the original — seed its
     // memo entry too, so it isn't (wrongly) treated as "changed" and
     // re-tokenized on the next debounce tick.
+    if (original.id in lastCalcAccuracy) {
+      lastCalcAccuracy[clone.id] = lastCalcAccuracy[original.id]!;
+    }
     if (original.id in lastCalcContents) {
       lastCalcContents[clone.id] = lastCalcContents[original.id];
     }
@@ -466,9 +497,18 @@
 
   // ─── Clear All ─────────────────────────────────────────────────────────────
   let showClearConfirm = $state(false);
+  /** The Clear-All trigger button — focus returns here when the modal closes. */
+  let clearTriggerEl: HTMLElement | undefined = $state();
 
-  function requestClearAll() {
+  function requestClearAll(e?: MouseEvent) {
+    clearTriggerEl = (e?.currentTarget as HTMLElement) ?? clearTriggerEl;
     showClearConfirm = true;
+  }
+  /** Close + return focus to the trigger so a keyboard user isn't left on <body>. */
+  function closeClearConfirm() {
+    showClearConfirm = false;
+    const trigger = clearTriggerEl;
+    requestAnimationFrame(() => trigger?.focus());
   }
   function confirmClearAll() {
     blocks = [
@@ -483,11 +523,37 @@
     ];
     variableValues = {};
     previewActive = false;
-    showClearConfirm = false;
     lastCalcContents = {}; // old block ids are gone — drop their memo entries
+    closeClearConfirm();
   }
   function cancelClearAll() {
-    showClearConfirm = false;
+    closeClearConfirm();
+  }
+
+  /** Move focus onto Cancel when the modal mounts (Svelte action on the {#if}). */
+  function focusOnMount(node: HTMLElement): void {
+    node.querySelector<HTMLElement>('.confirm-btn--cancel')?.focus();
+  }
+
+  /** aria-modal="true" must actually trap: Escape cancels, Tab cycles inside. */
+  function handleClearDialogKeydown(e: KeyboardEvent): void {
+    if (e.key === 'Escape') {
+      cancelClearAll();
+      return;
+    }
+    if (e.key !== 'Tab') return;
+    const dialog = e.currentTarget as HTMLElement;
+    const focusables = dialog.querySelectorAll<HTMLElement>('button');
+    if (focusables.length === 0) return;
+    const first = focusables[0]!;
+    const last = focusables[focusables.length - 1]!;
+    if (e.shiftKey && document.activeElement === first) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault();
+      first.focus();
+    }
   }
 
   // ─── Templates ─────────────────────────────────────────────────────────────
@@ -908,6 +974,7 @@
     <button
       class="prompt__tab"
       class:active={activeTab === 'build'}
+      aria-pressed={activeTab === 'build'}
       onclick={() => (activeTab = 'build')}
       type="button"
     >
@@ -916,6 +983,7 @@
     <button
       class="prompt__tab"
       class:active={activeTab === 'generate'}
+      aria-pressed={activeTab === 'generate'}
       onclick={() => (activeTab = 'generate')}
       type="button"
     >
@@ -1135,6 +1203,8 @@
       <div
         class="prompt__confirm-modal glass-panel"
         onclick={(e) => e.stopPropagation()}
+        onkeydown={handleClearDialogKeydown}
+        use:focusOnMount
         role="dialog"
         aria-modal="true"
         aria-labelledby="confirm-title"
@@ -1185,7 +1255,8 @@
 
   .prompt__toolbar-btn--danger:hover {
     border-color: var(--color-error);
-    color: var(--color-error);
+    /* --color-error is 4.38:1 on --bg-obsidian (< AA for this text-xs label). */
+    color: hsl(0, 70%, 68%);
     background: hsla(0, 70%, 55%, 0.06);
   }
 
@@ -1510,8 +1581,10 @@
   }
 
   .confirm-btn--danger {
-    background: var(--color-error);
-    border: 1px solid var(--color-error);
+    /* White-on-(--color-error) is 4.40:1 (< AA). The darker red (the existing
+       :hover value) is 5.29:1 with white; use it at rest too. */
+    background: hsl(0, 70%, 48%);
+    border: 1px solid hsl(0, 70%, 48%);
     color: white;
   }
 

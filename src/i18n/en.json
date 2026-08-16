@@ -20,8 +20,8 @@
     "handoffToPrompt": "Estimate this text's full prompt cost in Prompt Architect →"
   },
   "meta": {
-    "title": "VKVstudio — Engineer's Living Hub",
-    "description": "Modular AI microservice hub by Valery. Browser-based LLM tokenization and prompt engineering, plus a self-hosted embedding explorer and the Synapse assistant."
+    "title": "VKVstudio — AI and web engineering studio",
+    "description": "Modular AI microservice hub by Valerii. Browser-based LLM tokenization and prompt engineering, plus a self-hosted embedding explorer and the Synapse assistant."
   },
   "nav": {
     "home": "Home",
@@ -41,14 +41,14 @@
   },
   "hero": {
     "tagline": "From pixels|to pipelines",
-    "subtitle": "20 years of building things that work.",
+    "subtitle": "20 years of building things that work. Now AI I fine-tune and run myself.",
     "cta": "Enter the Lab",
     "scroll": "Scroll"
   },
   "about": {
     "headline": "From pixels to pipelines.",
     "headline_sub": "20 years of building things that work.",
-    "body": "I started by obsessing over single pixels in a photography studio — lighting, composition, the science of making products sell. That obsession with precision led me through marketing at industrial plants, into web development, and finally into AI architecture.",
+    "body": "I started by obsessing over single pixels in a photography studio — lighting, composition, the science of making products sell. That obsession with precision led me through marketing at industrial plants, into web development, and finally into AI architecture. The AI here is all Google’s own — a Gemma 4 I fine-tuned and self-host, EmbeddingGemma for search, Chirp 3 for voice.",
     "body2": "My engineering philosophy was forged by necessity. I build systems designed to run autonomously, scale without me, and fail gracefully. Every architecture decision asks one question: \"Will this still work when I can't be there?\"",
     "timeline_label": "Career Arc",
     "timeline": {
@@ -88,7 +88,7 @@
     "open": "Open →",
     "tokenizer": {
       "title": "Edge Tokenizer Profiler",
-      "description": "Visualize how LLMs see your text. Compare token counts, costs, and context usage across GPT-5.5, Gemini, Claude, and Llama — in real time.",
+      "description": "Visualize how LLMs see your text. Compare token counts, costs, and context usage across GPT, Gemini, Claude, and Llama — in real time.",
       "placeholder": "Enter text to tokenize...",
       "totalTokens": "Total Tokens",
       "characters": "Characters",
@@ -122,15 +122,12 @@
       "mlRuntime": "ML Runtime",
       "webgl3d": "3D / WebGL",
       "animation": "Animation",
-      "containers": "Containers",
-      "cloud": "Cloud",
-      "iac": "IaC",
-      "gpuComputing": "GPU Computing"
+      "cloud": "Cloud"
     }
   },
   "contact": {
     "title": "Let's Build Something",
-    "subtitle": "Have a complex problem that needs a systems thinker? I build things that scale without you.",
+    "subtitle": "Have a complex problem that needs a systems thinker? I build systems that keep running when nobody is watching.",
     "email_label": "Send a message",
     "github_label": "View code",
     "linkedin_label": "Connect"
@@ -194,7 +191,7 @@
     "enterTextAbove": "Enter text above",
     "tokenizing": "Tokenizing...",
     "textareaLabel": "Text to tokenize",
-    "approxNote": "≈ Approximate — real tokenizers are proprietary",
+    "approxNote": "≈ Estimate — open tokenizers run exactly here, closed ones are approximated",
     "viewMode": "View mode",
     "loadingTokenizer": "Loading tokenizer...",
     "fetchingApi": "Counting via API...",
@@ -207,7 +204,7 @@
     "closedWeightTokenizer": "Closed-weight model — counted with the nearest open Qwen vocabulary, not this model's own tokenizer",
     "retry": "Retry",
     "exactTooltipTiktoken": "Native OpenAI tokenizer",
-    "exactTooltipTransformers": "Native tokenizer via HuggingFace",
+    "exactTooltipTransformers": "Native tokenizer via Hugging Face",
     "exactTooltipApi": "Provider API count",
     "exactCount": "Exact count",
     "verifiedCount": "Verified count",
@@ -263,10 +260,7 @@
     "exactScoreNote": "Scores below are exact cosine similarity, computed in full embedding space — the 3D positions above are a lossy, dimensionality-reduced layout.",
     "backendServer": "Server",
     "backendServerTooltip": "Embeddings computed by Google's EmbeddingGemma on the inference server.",
-    "backendWebgpu": "WebGPU",
-    "backendWebgpuTooltip": "Running on-device inference accelerated by your GPU via WebGPU.",
     "backendWasm": "WASM",
-    "backendWasmTooltip": "Running on-device inference on CPU via WebAssembly — no WebGPU available in this browser.",
     "backendCached": "Cached",
     "backendCachedTooltip": "Reused embeddings computed on a previous visit — recomputation was skipped.",
     "downgradeNotice": "The embedding server was unreachable — check that the inference backend is running.",
@@ -544,7 +538,11 @@
     "basisExact": "exact",
     "basisApprox": "approx",
     "basisExactTooltip": "Counted by the model provider's own tokenizer, through the inference server.",
-    "basisApproxTooltip": "Counted locally with cl100k_base as a stand-in — the provider's tokenizer wasn't reached, so treat this number, and the cost derived from it, as an estimate. Edit any block to try again."
+    "basisApproxTooltip": "Counted locally with cl100k_base as a stand-in — the provider's tokenizer wasn't reached, so treat this number, and the cost derived from it, as an estimate. Edit any block to try again.",
+    "generateError": "Generation failed. The assistant runs on a small CPU server — try again in a moment, or write the blocks yourself below.",
+    "generateBusy": "Too many requests right now. The generator shares one rate limit with everyone on this network — wait a minute and try again.",
+    "generateTimeout": "Timed out after two minutes. The server is either restarting or answering someone else — try again shortly.",
+    "generateSlowHint": "Runs on a CPU server — expect about 40 seconds."
   },
   "synapse": {
     "brain": {
@@ -567,7 +565,7 @@
     "disclaimerShort": "Still in training — may invent facts. Verify before you trust it.",
     "auth": {
       "signInPrompt": "Sign in to sync your chats across devices.",
-      "anonymousNote": "Not signed in — your history stays on this device only.",
+      "anonymousNote": "Not signed in — this chat stays in this browser and is erased when you close it. Sign in to keep it.",
       "signOut": "Sign out",
       "signedInAs": "Signed in as {name}",
       "syncing": "Syncing your chats…",
@@ -602,7 +600,7 @@
       "badgeMockTitle": "Using mock fallback — backend unavailable",
       "badgeMockTitleBusy": "Using mock fallback — the server answered that it is busy right now. Try again in a moment.",
       "badgeMockTitleError": "Using mock fallback — the server was reached but answered with an error.",
-      "emptyStateText": "Ask Synapse anything about AI, web architecture, or VKVstudio stack",
+      "emptyStateText": "Ask Synapse anything about AI, web architecture, or the VKVstudio stack",
       "suggestionStack": "What is the VKVstudio stack?",
       "suggestionAbout": "Tell me about Synapse",
       "suggestionRag": "Explain RAG architecture",
@@ -624,7 +622,7 @@
       "inputPlaceholder": "Ask Synapse anything...",
       "errNoMic": "⚠ No microphone detected. Use text input.",
       "errMicUnavailable": "⚠ Microphone not available. Use text input.",
-      "errVoiceProcessingFailed": "⚠ Voice processing failed. Try again or use text input.",
+      "errVoiceProcessingFailed": "⚠ Could not make out that recording. Try again, or type your message instead.",
       "errVoiceServerOffline": "⚠ Voice server offline. Use text input.",
       "errConnectionError": "Connection error. Please try again.",
       "listeningPlaceholder": "🎤 Listening...",

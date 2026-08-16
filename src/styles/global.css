@@ -388,6 +388,19 @@ h4 {
   border-radius: var(--radius-sm);
 }
 
+/* Glass-panel surface utility. Global on purpose: Astro scopes a component's
+   <style> to that component's own elements, so when this was defined inside one
+   section's scoped block every OTHER component that adds `class="… glass-panel"`
+   (VariablePanel, the Prompt confirm modal) silently got no surface at all. */
+.glass-panel {
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--glass-shadow);
+}
+
 /* Skip-link: first focusable element, lets keyboard/AT users jump past the nav to the
    page content. Off-screen until focused. */
 .skip-link {

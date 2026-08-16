@@ -16,6 +16,28 @@
 
 import { mockSynapseResponse } from '@/lib/synapse-mock';
 import { SYNAPSE_API_BASE } from './api-config';
+import { getIdToken } from './auth';
+
+/**
+ * Attach the Google ID token to a generation request, when there is one.
+ *
+ * Every route that spends the owner's hardware or his Google quota —
+ * /api/chat, /api/chat/stream, /api/voice, /api/voice/stream, /api/tts — is
+ * metered per identity by the backend. Until this existed, the client sent no
+ * credential at all on any of them: the backend's per-account allowance could
+ * therefore never be attributed to an account, and the sign-in requirement was
+ * unsatisfiable — turning it on would have locked out signed-in users too.
+ * Conversation sync (synapse-db-server.ts) had carried the header all along;
+ * only the generation half was missing it.
+ *
+ * Anonymous visitors still get a request, without the header. The backend
+ * decides what an anonymous caller is allowed — that is not the client's call
+ * to make, and a client-side gate would be worth nothing anyway.
+ */
+function withAuth(headers: Record<string, string> = {}): Record<string, string> {
+  const token = getIdToken();
+  return token ? { ...headers, Authorization: `Bearer ${token}` } : headers;
+}
 
 // ─── Public types ─────────────────────────────────────────────────────────────
 
@@ -133,16 +155,20 @@ function policyMessage(info: FallbackInfo, userMessage: string): string | null {
   if (info.kind === 'auth') {
     return ru
       ? 'Это шаблонный ответ, а не модель. Живой Synapse — дообученная Gemma 4 на своём сервере — отвечает после входа через Google: он работает на GPU, который оплачивается из кармана, поэтому доступ именной. Кнопка входа слева.'
-      : "This is a scripted reply, not the model. The live Synapse — a fine-tuned Gemma 4 on my own server — answers once you sign in with Google: it runs on a GPU I pay for, so access is per-account. The sign-in button is on the left.";
+      : 'This is a scripted reply, not the model. The live Synapse — a fine-tuned Gemma 4 on my own server — answers once you sign in with Google: it runs on a GPU I pay for, so access is per-account. The sign-in button is on the left.';
   }
 
   if (info.kind === 'quota') {
     const mins = Math.round((info.retryAfter ?? 0) / 60);
     const when = mins >= 60 ? `${Math.round(mins / 60)} ч` : `${mins} мин`;
     const whenEn = mins >= 60 ? `${Math.round(mins / 60)} hours` : `${mins} minutes`;
+    // "a metered GPU" was wrong here and only right in the auth branch above:
+    // the quota applies on the self-hosted CPU box too, where there is no GPU
+    // and nothing metered — the limit exists because one small server serves
+    // everybody. Say that instead; it is true in both deployments.
     return ru
-      ? `Это шаблонный ответ — ваши сообщения к живой модели на сейчас закончились. Она крутится на платном GPU, поэтому норма небольшая. Следующее откроется примерно через ${when}.`
-      : `This is a scripted reply — you have used your messages to the live model for now. It runs on a metered GPU, so the allowance is small. The next one opens in about ${whenEn}.`;
+      ? `Это шаблонный ответ — ваши сообщения к живой модели на сейчас закончились. Она работает на одном своём сервере, поэтому норма небольшая. Следующее откроется примерно через ${when}.`
+      : `This is a scripted reply — you have used your messages to the live model for now. It runs on a single self-hosted server, so the allowance is small. The next one opens in about ${whenEn}.`;
   }
 
   return null;
@@ -231,26 +257,45 @@ export function sanitizeResponse(raw: string): string {
 
   let clean = raw;
 
-  // 1. Strip HTML numeric entities first (they can reconstruct '<', ':' etc.).
-  clean = clean.replace(/&#[xX]?[0-9a-fA-F]+;?/g, '');
+  /* EVERY removal runs inside ONE fixed-point loop, and that is the fix.
 
-  // 2. Strip HTML tags to a FIXED POINT. A single pass is a classic mutation-XSS
-  //    (mXSS) bypass: removing an outer malformed tag can splice the leftover
-  //    fragments into a valid inner tag — e.g. `<<script>script>` → `<script>`.
-  //    Looping until the string stops changing collapses any such reconstruction.
+     The passes used to run in stages: entities, then tags to a fixed point,
+     then schemes and handlers once, then comments and CDATA once. Only the tag
+     stage looped, so anything a LATER stage could reconstruct was never
+     re-examined — and stripping a comment splices its neighbours together,
+     which is exactly how these payloads work:
+
+       `<<!-- -->script>`     → comment gone → `<script>`     (tag stage already ran)
+       `o<!--y-->nerror=`     → comment gone → `onerror=`     (handler stage already ran)
+       `java<!--y-->script:`  → comment gone → `javascript:`  (scheme stage already ran)
+
+     Measured, not argued: twelve such payloads fed to the staged version came
+     out with a live tag, handler or scheme ten times. tests/unit/sanitizer.test.ts
+     keeps feeding them. Looping all the removals together means every splice is
+     re-scanned until the string stops changing, so there is no "after" stage for
+     a payload to reassemble in.
+
+     The scheme pattern also loses its leading `\b`: it required a word boundary
+     before `javascript:`, so `javajavascript:script:` — the very nesting the
+     loop unwraps — matched nothing. Without the anchor the inner scheme is
+     stripped and the loop handles what that splices.
+
+     Deliberately blunt: `Array<T>` and `Vec<u8>` are stripped from ordinary
+     prose too, because this rule cannot tell them from a tag. That is the wrong
+     trade for a Markdown renderer and the right one for a sanitizer — an
+     allowlist of "tags that look harmless" is how these get bypassed. Live
+     terminal output does NOT pass through here; it goes through renderInline()
+     in synapse-render.ts, which escapes first and never has to guess. */
   let prev: string;
   do {
     prev = clean;
-    clean = clean.replace(/<\/?[a-zA-Z][^>]*\/?>/g, '');
+    clean = clean.replace(/&#[xX]?[0-9a-fA-F]+;?/g, ''); // numeric entities
+    clean = clean.replace(/<!--[\s\S]*?-->/g, ''); // comments (splice source)
+    clean = clean.replace(/<!\[CDATA\[[\s\S]*?\]\]>/g, ''); // CDATA
+    clean = clean.replace(/<\/?[a-zA-Z][^>]*\/?>/g, ''); // tags
+    clean = clean.replace(/(?:javascript|data|vbscript)\s*:/gi, ''); // schemes
+    clean = clean.replace(/\bon[a-zA-Z]{2,20}\s*=/gi, ''); // event handlers
   } while (clean !== prev);
-
-  // 3. Neutralize dangerous URI schemes + inline event handlers (defense in depth).
-  clean = clean.replace(/\b(?:javascript|data|vbscript)\s*:/gi, '');
-  clean = clean.replace(/\bon[a-zA-Z]{2,20}\s*=/gi, '');
-
-  // 4. Remove HTML comments and CDATA sections.
-  clean = clean.replace(/<!--[\s\S]*?-->/g, '');
-  clean = clean.replace(/<!\[CDATA\[[\s\S]*?\]\]>/g, '');
 
   return clean;
 }
@@ -270,6 +315,77 @@ interface HealthCache {
 }
 
 // ─── Factory ──────────────────────────────────────────────────────────────────
+
+// ── SSE stream parser ─────────────────────────────────────────────────────────
+
+/**
+ * Read an SSE response and hand each complete `event:`/`data:` pair to a handler.
+ *
+ * Module-level and exported rather than closed over inside the client factory,
+ * for one reason: this is the function every streamed token passes through, and
+ * while it lived inside the closure it was the only path in the file that no
+ * test could reach. It needs none of the factory's state, so hiding it bought
+ * nothing and cost the coverage. The tests in tests/unit/sse-parser.test.ts
+ * feed it deliberately hostile chunk splits.
+ *
+ * The whole difficulty is that a network chunk boundary falls wherever TCP
+ * decides. Two things follow, and both were once wrong here:
+ *
+ *   • `currentEvent` must outlive a single read(). An event is two lines, and
+ *     when `event: token` arrived in one chunk and its `data:` in the next, a
+ *     per-iteration variable was empty by the time the data line was parsed —
+ *     so the event was dropped with no token, no error and a reply quietly
+ *     missing a word.
+ *
+ *   • The tail must be flushed. The loop keeps the last, possibly incomplete
+ *     line in `buffer`; if a server closes cleanly after a final `data:` line
+ *     with no trailing newline, that line is complete but was never parsed.
+ */
+export async function parseSSEStream(
+  response: Response,
+  handlers: {
+    onEvent: (event: string, data: string) => void;
+    onDone?: () => void;
+  }
+): Promise<void> {
+  const reader = response.body?.getReader();
+  if (!reader) throw new Error('No response body');
+
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let currentEvent = '';
+
+  const consume = (line: string): void => {
+    if (line.startsWith('event: ')) {
+      currentEvent = line.slice(7).trim();
+    } else if (line.startsWith('data: ')) {
+      const data = line.slice(6);
+      if (currentEvent) {
+        handlers.onEvent(currentEvent, data);
+        currentEvent = '';
+      }
+    } else if (line === '') {
+      currentEvent = '';
+    }
+  };
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+
+    const lines = buffer.split('\n');
+    buffer = lines.pop() ?? ''; // keep the incomplete last line for the next read
+    for (const line of lines) consume(line);
+  }
+
+  // Flush whatever a multi-byte character left pending, then the final line.
+  buffer += decoder.decode();
+  if (buffer !== '') consume(buffer);
+
+  handlers.onDone?.();
+}
 
 export function createSynapseClient(config?: Partial<SynapseClientConfig>): SynapseClient {
   const baseUrl = config?.baseUrl?.replace(/\/$/, '') ?? SYNAPSE_API_BASE;
@@ -308,11 +424,17 @@ export function createSynapseClient(config?: Partial<SynapseClientConfig>): Syna
       });
 
       const alive = res.ok;
-      _healthCache = { alive, timestamp: now };
+      // Stamped NOW, not with the `now` captured before the request. On a
+      // timeout the request takes the full healthTimeout (8 s) and the dead
+      // verdict is only cached for 5 — so back-dating the entry made it born
+      // expired, and the negative cache, whose entire job is to stop a slow
+      // backend from stalling every message, never once took effect. Every
+      // message paid a fresh 8-second wait to rediscover the same silence.
+      _healthCache = { alive, timestamp: Date.now() };
       return alive;
     } catch {
       // Network error or timeout → backend unreachable
-      _healthCache = { alive: false, timestamp: now };
+      _healthCache = { alive: false, timestamp: Date.now() };
       return false;
     } finally {
       clearTimeout(timer);
@@ -344,10 +466,10 @@ export function createSynapseClient(config?: Partial<SynapseClientConfig>): Syna
     const res = await fetch(`${baseUrl}/api/chat`, {
       method: 'POST',
       signal,
-      headers: {
+      headers: withAuth({
         'Content-Type': 'application/json',
         Accept: 'application/json',
-      },
+      }),
       body,
     });
 
@@ -489,6 +611,7 @@ export function createSynapseClient(config?: Partial<SynapseClientConfig>): Syna
       const res = await fetch(`${baseUrl}/api/voice`, {
         method: 'POST',
         signal: controller.signal,
+        headers: withAuth(),
         body: form,
       });
 
@@ -534,7 +657,7 @@ export function createSynapseClient(config?: Partial<SynapseClientConfig>): Syna
       const res = await fetch(`${baseUrl}/api/tts`, {
         method: 'POST',
         signal: controller.signal,
-        headers: { 'Content-Type': 'application/json' },
+        headers: withAuth({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ text }),
       });
 
@@ -546,50 +669,6 @@ export function createSynapseClient(config?: Partial<SynapseClientConfig>): Syna
     } finally {
       clearTimeout(timer);
     }
-  }
-
-  // ── SSE stream parser ───────────────────────────────────────────────────────
-
-  async function parseSSEStream(
-    response: Response,
-    handlers: {
-      onEvent: (event: string, data: string) => void;
-      onDone?: () => void;
-    }
-  ): Promise<void> {
-    const reader = response.body?.getReader();
-    if (!reader) throw new Error('No response body');
-
-    const decoder = new TextDecoder();
-    let buffer = '';
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      buffer += decoder.decode(value, { stream: true });
-
-      // Parse SSE events from buffer
-      const lines = buffer.split('\n');
-      buffer = lines.pop() ?? ''; // keep incomplete last line
-
-      let currentEvent = '';
-      for (const line of lines) {
-        if (line.startsWith('event: ')) {
-          currentEvent = line.slice(7).trim();
-        } else if (line.startsWith('data: ')) {
-          const data = line.slice(6);
-          if (currentEvent) {
-            handlers.onEvent(currentEvent, data);
-            currentEvent = '';
-          }
-        } else if (line === '') {
-          currentEvent = '';
-        }
-      }
-    }
-
-    handlers.onDone?.();
   }
 
   // ── chatStream() ────────────────────────────────────────────────────────────
@@ -622,14 +701,18 @@ export function createSynapseClient(config?: Partial<SynapseClientConfig>): Syna
       ? AbortSignal.any([controller.signal, externalSignal])
       : controller.signal;
 
+    // Hoisted out of the try so the catch below can tell "the backend never
+    // said anything" from "the backend was mid-sentence when it stopped".
+    let fullText = '';
+
     try {
       const res = await fetch(`${baseUrl}/api/chat/stream`, {
         method: 'POST',
         signal: combinedSignal,
-        headers: {
+        headers: withAuth({
           'Content-Type': 'application/json',
           Accept: 'text/event-stream',
-        },
+        }),
         body: JSON.stringify({
           message: request.message,
           history: request.history ?? [],
@@ -639,7 +722,6 @@ export function createSynapseClient(config?: Partial<SynapseClientConfig>): Syna
       if (!res.ok) throw httpError(res);
 
       _isLive = true;
-      let fullText = '';
 
       await parseSSEStream(res, {
         onEvent(event, data) {
@@ -675,15 +757,27 @@ export function createSynapseClient(config?: Partial<SynapseClientConfig>): Syna
         const info = describeFailure(err);
         if (!aborted) callbacks.onFallback?.(info);
 
-        // A refusal on policy grounds gets an answer that explains itself. The
-        // scripted mock is the right response to a backend that is down; it is
-        // the wrong response to "sign in" or "you're out of messages", where the
-        // visitor would be left guessing why the assistant went shallow.
-        const policy = aborted ? null : policyMessage(info, request.message);
-        const content = policy ?? (await callMock(request.message)).content;
-        callbacks.onModel?.('mock');
-        callbacks.onToken?.(content);
-        callbacks.onDone?.(content);
+        // Only when the reply has not started. onToken APPENDS, so running
+        // the scripted mock after real tokens had arrived welded the two
+        // together inside one message: half a real answer, then a canned one,
+        // no seam, nothing to tell the reader where the model stopped and the
+        // script began. A stream that dies mid-sentence is an error — report
+        // it as one and keep what did arrive. The terminal's onError handler
+        // preserves partial content and only substitutes its own text when
+        // there is none.
+        if (fullText !== '') {
+          callbacks.onError?.(err instanceof Error ? err.message : 'Stream failed');
+        } else {
+          // A refusal on policy grounds gets an answer that explains itself.
+          // The scripted mock is the right response to a backend that is down;
+          // it is the wrong response to "sign in" or "you're out of messages",
+          // where the visitor would be left guessing why it went shallow.
+          const policy = aborted ? null : policyMessage(info, request.message);
+          const content = policy ?? (await callMock(request.message)).content;
+          callbacks.onModel?.('mock');
+          callbacks.onToken?.(content);
+          callbacks.onDone?.(content);
+        }
       } else {
         callbacks.onError?.(err instanceof Error ? err.message : 'Stream failed');
       }
@@ -724,6 +818,7 @@ export function createSynapseClient(config?: Partial<SynapseClientConfig>): Syna
       const res = await fetch(`${baseUrl}/api/voice/stream`, {
         method: 'POST',
         signal: combinedSignal,
+        headers: withAuth(),
         body: form,
       });
 

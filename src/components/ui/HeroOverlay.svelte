@@ -681,7 +681,19 @@
        `background-clip: text`, so a browser without image-set() support
        computed `background-image: none` and rendered the site's H1 as nothing
        but its thin 2px stroke outline. @supports survives minification because
-       the fallback is no longer a duplicate declaration the minifier may drop. */
+       the fallback is no longer a duplicate declaration the minifier may drop.
+
+       Sizing: this box measures 424x168 CSS px and does not grow with the
+       viewport — measured in the browser, identical at 1280 and at 2560. With
+       `cover` the texture paints at 547x168, so 1094x336 device pixels is
+       everything a DPR-2 display can resolve. The file was 2400x737 / 369 KB,
+       roughly five times the pixels that can ever be shown, and it dominated
+       the desktop payload. It is now 1200x368 / 101 KB — still native at DPR 2.
+       Compared against the old file at every DPR the browser can ask for, the
+       difference is invisible: the content is a mesh of thin lines seen only
+       through letterforms, and four candidate encodings were indistinguishable
+       side by side. Do not "restore quality" by re-exporting this at 2400 —
+       the pixels have nowhere to go. */
     background-image: image-set(
       url('/neural-texture.avif') type('image/avif'),
       url('/neural-texture.webp') type('image/webp')
@@ -910,13 +922,13 @@
     .hero-overlay__title {
       font-size: clamp(1.8rem, 8vw, 3rem);
 
-      /* A 512x157 texture instead of the 2400x737 one. The full-size asset is
-         360 KB and this element paints it into a box of roughly 175x69 CSS px
-         — ~306x121 device pixels at DPR 1.75 — and then clips it to the inside
-         of the glyphs, so ~60x more pixels were being downloaded than could
-         ever be shown. It is not the LCP element and never becomes one, but at
-         369 KB it was the largest asset on the page and sat inside the byte
-         graph the LCP is simulated against.
+      /* A 512x157 texture instead of the desktop one. This element paints it
+         into a box of roughly 175x69 CSS px — ~306x121 device pixels at
+         DPR 1.75 — and then clips it to the inside of the glyphs, so the
+         full-size asset was sending ~60x more pixels than could ever be shown.
+         It is not the LCP element and never becomes one, but it was the largest
+         asset on the page and sat inside the byte graph the LCP is simulated
+         against.
 
          Measured, not assumed: swapping this one file for a small stand-in and
          changing nothing else moved simulated mobile LCP from 6004 ms to
@@ -924,10 +936,10 @@
          is the tell that this is a byte-weight problem, not a render one.
 
          A losing declaration's background-image is never fetched, so phones
-         take only the 23.5 KB file and desktops only the 360 KB one. The
-         @supports fallback further up still points at the full-size JPEG on
-         purpose: it only fires on engines without image-set() support, which
-         are not the ones being optimised here. */
+         take only the 23.5 KB file and desktops only the 101 KB one. The
+         @supports fallback further up still points at the JPEG on purpose: it
+         only fires on engines without image-set() support, which are not the
+         ones being optimised here. */
       background-image: image-set(
         url('/neural-texture-mobile.avif') type('image/avif'),
         url('/neural-texture-mobile.webp') type('image/webp')

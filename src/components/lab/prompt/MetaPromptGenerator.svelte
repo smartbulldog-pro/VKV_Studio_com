@@ -12,6 +12,24 @@
   let selectedModel = $state(MODELS[0].id);
   let selectedStyle = $state('structured');
   let isGenerating = $state(false);
+  /**
+   * The one user-facing surface on this site that had no failure path at all:
+   * a throw, a bare console.error, and a button that went back to enabled with
+   * nothing said. On a backend that takes ~40 s and rate-limits per IP, that
+   * meant a visitor could press it, wait, and be told nothing — twice, then
+   * conclude the tool was broken. Everything else here degrades visibly; this
+   * did not.
+   */
+  let genError = $state<string | null>(null);
+
+  /**
+   * Deliberately NOT routed through createSynapseClient. That client answers a
+   * dead backend with mock persona text, which contains no [SYSTEM]/[USER] tags,
+   * so the parser below would drop "This is a scripted reply…" into the builder
+   * as a user block. A silent failure is bad; a fabricated prompt presented as
+   * generated output is worse.
+   */
+  const GENERATE_TIMEOUT_MS = 120_000;
 
   /**
    * Builds the generation request text in the current UI locale.
@@ -27,7 +45,12 @@
    * are deliberately kept as literal, untranslated ASCII in both locales —
    * the parsing below matches on those exact tags regardless of language.
    */
-  function buildGenerationPrompt(uiLang: 'en' | 'ru', task: string, model: string, style: string): string {
+  function buildGenerationPrompt(
+    uiLang: 'en' | 'ru',
+    task: string,
+    model: string,
+    style: string
+  ): string {
     if (uiLang === 'ru') {
       return `Ты генератор промптов. Сгенерируй промпт для следующей задачи.
 Отвечай ТОЛЬКО на русском языке — не используй английский или другой язык.
@@ -58,27 +81,36 @@ Do not add explanations. Output only the prompt.`;
     if (!userInput.trim() || isGenerating) return;
 
     isGenerating = true;
+    genError = null;
+    const abort = new AbortController();
+    const timer = setTimeout(() => abort.abort(), GENERATE_TIMEOUT_MS);
     try {
       const promptText = buildGenerationPrompt(lang, userInput, selectedModel, selectedStyle);
 
       const res = await fetch(`${SYNAPSE_API_BASE}/api/chat`, {
         method: 'POST',
+        signal: abort.signal,
         headers: { 'Content-Type': 'application/json' },
         // `lang` is passed alongside the directive baked into `promptText`
         // above so a future backend revision can key off it directly —
         // the current `/api/chat` (ChatRequest, extra="ignore") simply
         // drops unknown fields, so this is inert until then, not a break.
-        body: JSON.stringify({ message: promptText, history: [], lang })
+        body: JSON.stringify({ message: promptText, history: [], lang }),
       });
 
-      if (!res.ok) throw new Error('Generation failed');
+      if (!res.ok) {
+        // 429 is the common one and is not a fault: the backend rate-limits per
+        // IP, and a shared address reaches it without anyone misbehaving.
+        genError = t(lang, res.status === 429 ? 'prompt.generateBusy' : 'prompt.generateError');
+        return;
+      }
 
       const data = await res.json();
       const text = data.response;
 
       // Parse blocks
       const blocks: { role: string; content: string }[] = [];
-      
+
       const systemMatch = text.match(/\[SYSTEM\]\n?([\s\S]*?)(?=\[USER\]|\[ASSISTANT\]|$)/i);
       const userMatch = text.match(/\[USER\]\n?([\s\S]*?)(?=\[SYSTEM\]|\[ASSISTANT\]|$)/i);
       const assistantMatch = text.match(/\[ASSISTANT\]\n?([\s\S]*?)(?=\[SYSTEM\]|\[USER\]|$)/i);
@@ -100,8 +132,12 @@ Do not add explanations. Output only the prompt.`;
         onGenerated([{ role: 'user', content: text.trim() }]);
       }
     } catch (err) {
-      console.error(err);
+      genError = t(
+        lang,
+        (err as Error)?.name === 'AbortError' ? 'prompt.generateTimeout' : 'prompt.generateError'
+      );
     } finally {
+      clearTimeout(timer);
       isGenerating = false;
     }
   }
@@ -112,6 +148,9 @@ Do not add explanations. Output only the prompt.`;
     <h2 class="generator-title">{t(lang, 'prompt.generateTitle')}</h2>
     <p class="generator-hint">{t(lang, 'prompt.generateTabHint')}</p>
     <p class="generator-disclaimer" role="note">{t(lang, 'prompt.generateDisclaimer')}</p>
+    {#if genError}
+      <p class="generator-error" role="alert">{genError}</p>
+    {/if}
   </div>
 
   <div class="generator-field">
@@ -119,6 +158,7 @@ Do not add explanations. Output only the prompt.`;
       class="generator-textarea"
       bind:value={userInput}
       placeholder={t(lang, 'prompt.generatePlaceholder')}
+      aria-label={t(lang, 'prompt.generateTitle')}
     ></textarea>
   </div>
 
@@ -155,11 +195,12 @@ Do not add explanations. Output only the prompt.`;
       {t(lang, 'prompt.generateButton')}
     {/if}
   </button>
+  <p class="generator-slow-hint">{t(lang, 'prompt.generateSlowHint')}</p>
 </div>
 
 <style>
   .generator-card {
-    background: var(--bg-glass);
+    background: var(--glass-bg);
     border: 1px solid var(--border-subtle);
     border-radius: var(--radius-lg);
     padding: var(--space-6);
@@ -202,6 +243,29 @@ Do not add explanations. Output only the prompt.`;
     line-height: var(--leading-normal);
   }
 
+  /* Same shape as the disclaimer above it, in the error hue rather than amber —
+     it sits in the same place, so a visitor who has read one recognises the
+     other as the tool speaking rather than as decoration. */
+  .generator-error {
+    margin: var(--space-2) 0 0;
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid hsla(0, 75%, 60%, 0.35);
+    border-radius: var(--radius-md);
+    background: hsla(0, 75%, 60%, 0.08);
+    color: hsl(0, 80%, 76%);
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    line-height: var(--leading-normal);
+  }
+
+  .generator-slow-hint {
+    margin: var(--space-2) 0 0;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    text-align: center;
+  }
+
   .generator-field {
     display: flex;
     flex-direction: column;
@@ -223,7 +287,14 @@ Do not add explanations. Output only the prompt.`;
   }
 
   .generator-textarea:focus {
-    border-color: var(--accent-cyan-400);
+    /* was --accent-cyan-400, a token that is defined nowhere — the focus border
+       silently kept its unfocused colour. Green is this tool's accent. */
+    border-color: var(--accent-green-300);
+  }
+
+  .generator-textarea:focus-visible {
+    outline: 2px solid var(--accent-green-400);
+    outline-offset: 2px;
   }
 
   .generator-controls {
@@ -263,7 +334,14 @@ Do not add explanations. Output only the prompt.`;
   }
 
   .generator-select:focus {
-    border-color: var(--accent-cyan-400);
+    /* was --accent-cyan-400, a token that is defined nowhere — the focus border
+       silently kept its unfocused colour. Green is this tool's accent. */
+    border-color: var(--accent-green-300);
+  }
+
+  .generator-select:focus-visible {
+    outline: 2px solid var(--accent-green-400);
+    outline-offset: 2px;
   }
 
   @media (max-width: 767px) {
@@ -313,15 +391,34 @@ Do not add explanations. Output only the prompt.`;
     animation: blink 1s infinite;
   }
 
+  @media (prefers-reduced-motion: reduce) {
+    .generator-btn.generating,
+    .pulse-dot {
+      animation: none;
+    }
+  }
+
   @keyframes pulse {
-    0% { opacity: 1; }
-    50% { opacity: 0.8; }
-    100% { opacity: 1; }
+    0% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.8;
+    }
+    100% {
+      opacity: 1;
+    }
   }
 
   @keyframes blink {
-    0% { opacity: 1; }
-    50% { opacity: 0.3; }
-    100% { opacity: 1; }
+    0% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.3;
+    }
+    100% {
+      opacity: 1;
+    }
   }
 </style>

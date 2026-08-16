@@ -17,7 +17,8 @@
   let isHovered = $state(false);
 
   function onMouseMove(e: MouseEvent): void {
-    if (!cardEl) return;
+    // Respect prefers-reduced-motion (CLAUDE.md house rule): no cursor-follow motion.
+    if (!cardEl || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
     const rect = cardEl.getBoundingClientRect();
     const x = e.clientX - rect.left - rect.width / 2;
     const y = e.clientY - rect.top - rect.height / 2;
@@ -57,5 +58,12 @@
   /* When hovered, respond faster for a natural feel */
   .magnetic-wrapper.is-hovered {
     transition: transform 150ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .magnetic-wrapper,
+    .magnetic-wrapper.is-hovered {
+      transition: none;
+    }
   }
 </style>

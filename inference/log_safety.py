@@ -15,34 +15,37 @@ from __future__ import annotations
 import os
 
 
+# Every env var this process reads that names or holds auth material. Kept as ONE
+# tuple, used for both redaction and child-environment stripping, because they had
+# drifted: two credential vars config.py genuinely reads —
+# SYNAPSE_GOOGLE_STT_CREDENTIALS and SYNAPSE_LLM_REMOTE_CREDENTIALS — were in
+# neither list, so a path that identifies a key file could reach a log line and was
+# handed to every llama-server child. One list cannot drift from itself.
+#
+# The test in tests/test_log_safety.py greps config.py for credential-shaped env
+# names and fails when one appears that is not named here, so the next one added
+# cannot be forgotten the way these two were.
+_SECRET_ENV_KEYS = (
+    "ANTHROPIC_API_KEY",
+    "GOOGLE_API_KEY",
+    "GOOGLE_APPLICATION_CREDENTIALS",
+    "SYNAPSE_GOOGLE_TTS_CREDENTIALS",
+    "SYNAPSE_GOOGLE_STT_CREDENTIALS",
+    "SYNAPSE_LLM_REMOTE_CREDENTIALS",
+)
+
+
 def _load_secret_values() -> list[str]:
     """Secret env values that must never appear in a log line."""
-    return [
-        v for v in (
-            os.getenv("ANTHROPIC_API_KEY"),
-            os.getenv("GOOGLE_API_KEY"),
-            os.getenv("SYNAPSE_GOOGLE_TTS_CREDENTIALS"),
-            os.getenv("GOOGLE_APPLICATION_CREDENTIALS"),
-        )
-        if v
-    ]
+    return [v for v in (os.getenv(k) for k in _SECRET_ENV_KEYS) if v]
 
 
 # Captured once at import (env is fixed for the process lifetime).
 _SECRET_VALUES = _load_secret_values()
 
-# Env var NAMES holding provider secrets. The local llama-server children need NONE
-# of these; stripping them from the child environment shrinks the blast radius if the
-# third-party binary ever dumps its env (crash handler, /proc/<pid>/environ on a
-# shared host, a debug flag).
-_SECRET_ENV_KEYS = (
-    "ANTHROPIC_API_KEY",
-    "GOOGLE_API_KEY",
-    "SYNAPSE_GOOGLE_TTS_CREDENTIALS",
-    "GOOGLE_APPLICATION_CREDENTIALS",
-)
-
-
+# The llama-server children need NONE of the names above; stripping them from the
+# child environment shrinks the blast radius if the third-party binary ever dumps
+# its env (crash handler, /proc/<pid>/environ on a shared host, a debug flag).
 def child_env() -> dict:
     """A copy of the current environment with provider secrets removed, for spawning
     the llama-server subprocesses (they need PATH/CUDA vars but never the API keys)."""

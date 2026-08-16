@@ -78,6 +78,98 @@ export function wasCreatedThisSession(id: string): boolean {
   return createdThisSession.has(id);
 }
 
+/**
+ * Marker proving THIS TAB has already run the purge. `sessionStorage` dies with
+ * the tab, which is most of the boundary the owner asked for — "close the
+ * browser and it is gone, sign in and it is kept".
+ */
+const BROWSER_SESSION_MARKER = 'synapse:browser-session';
+
+/**
+ * Heartbeat proving some tab was alive very recently. This exists because
+ * `sessionStorage` alone got it WRONG, and the way it was wrong destroyed data:
+ * sessionStorage is per-TAB while IndexedDB is per-ORIGIN, so opening a second
+ * tab looked like a fresh browser session and deleted the anonymous
+ * conversation the FIRST tab was still writing into. Same for a middle-click
+ * into a new tab, or a link opened from the Lab.
+ *
+ * localStorage is shared across tabs and survives a reload, so a recent
+ * timestamp is proof that the browser never actually closed. The purge now
+ * needs BOTH signals to agree: this tab has not purged yet AND nobody has been
+ * here lately.
+ */
+const LAST_SEEN_KEY = 'synapse:last-seen';
+
+/**
+ * How stale the heartbeat must be before we accept that the browser closed.
+ *
+ * A live tab refreshes it on an interval well under this, so a second tab
+ * always finds it fresh. The cost of the window is that closing and reopening
+ * the browser inside it keeps the history — which is the harmless direction to
+ * be wrong in. Deleting a conversation someone is still typing into is not.
+ */
+const SESSION_GAP_MS = 90_000;
+
+/** Called by the UI on mount and on an interval, so other tabs can see us. */
+export function touchBrowserSession(): void {
+  try {
+    localStorage.setItem(LAST_SEEN_KEY, String(Date.now()));
+  } catch {
+    /* storage disabled — purge then fails closed, which is the safe direction */
+  }
+}
+
+/**
+ * Delete anonymous conversations left over from a PREVIOUS browser session.
+ *
+ * Signing in is what makes history durable. Without it, chats are held in this
+ * browser only — and holding a stranger's transcripts on a shared machine for
+ * days is not a feature, it is a leak with a friendly name. So an anonymous
+ * history now lasts exactly as long as the browser stays open: F5 keeps it,
+ * closing the browser clears it, signing in preserves it (the chat is re-tagged
+ * to that account and pushed to the server, so it stops being anonymous).
+ *
+ * Runs at most once per tab, only when no other tab has been alive recently,
+ * and only deletes rows owned by ANON_OWNER — an account's chats are never
+ * touched here.
+ *
+ * If either storage is unavailable (private modes, storage disabled) this does
+ * NOTHING rather than guessing. Failing to delete is a privacy shortfall;
+ * deleting because we could not tell would be data loss, and between the two
+ * the destructive mistake is the one worth refusing.
+ */
+export async function purgeStaleAnonConversations(): Promise<number> {
+  let firstVisitThisTab: boolean;
+  let lastSeen: number;
+  try {
+    firstVisitThisTab = sessionStorage.getItem(BROWSER_SESSION_MARKER) === null;
+    sessionStorage.setItem(BROWSER_SESSION_MARKER, '1');
+    lastSeen = Number(localStorage.getItem(LAST_SEEN_KEY)) || 0;
+  } catch {
+    return 0;
+  }
+  if (!firstVisitThisTab) return 0;
+
+  // Another tab is open right now, or the browser was closed only moments ago.
+  // Either way this is not a fresh browser session, and the anonymous history
+  // belongs to whoever is still using it. Refresh the heartbeat and leave.
+  if (lastSeen && Date.now() - lastSeen < SESSION_GAP_MS) {
+    touchBrowserSession();
+    return 0;
+  }
+  touchBrowserSession();
+
+  const stale = await db.conversations.where('owner').equals(ANON_OWNER).toArray();
+  if (stale.length === 0) return 0;
+
+  const ids = stale.map((c) => c.id);
+  await db.transaction('rw', [db.conversations, db.messages], async () => {
+    await db.messages.where('convId').anyOf(ids).delete();
+    await db.conversations.where('id').anyOf(ids).delete();
+  });
+  return ids.length;
+}
+
 export interface StoredMessage {
   autoId?: number; // Auto-increment primary key
   convId: string; // Foreign key → conversations.id
@@ -351,6 +443,14 @@ export async function migrateOldData(): Promise<void> {
             title: old.title,
             createdAt: old.createdAt,
             updatedAt: old.updatedAt,
+            // Required. Every read is `where('owner').equals(currentOwner)`, so
+            // a row written without one is invisible to every identity there
+            // is — the migration imported the history and hid it in the same
+            // breath. ANON_OWNER is the same answer the v3 upgrade gives to
+            // the same question (see its comment above): at import time nobody
+            // knows who wrote these, and guessing is the mistake that scoping
+            // exists to prevent.
+            owner: ANON_OWNER,
           });
           for (const msg of old.messages) {
             await db.messages.add({
@@ -426,6 +526,7 @@ async function migrateFromOldIDB(): Promise<void> {
                 title: old.title,
                 createdAt: old.createdAt,
                 updatedAt: old.updatedAt,
+                owner: ANON_OWNER, // same reason as the localStorage path above
               });
               for (const msg of old.messages) {
                 await db.messages.add({

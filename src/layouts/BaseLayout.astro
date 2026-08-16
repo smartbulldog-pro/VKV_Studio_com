@@ -2,6 +2,7 @@
 import type { Lang } from '@i18n/utils';
 import { t, supportedLangs } from '@i18n/utils';
 import CookieConsent from '@components/ui/CookieConsent.svelte';
+import Footer from '@components/layout/Footer.astro';
 import { CONTACT_EMAIL } from '@/lib/site-config';
 import '@styles/global.css';
 
@@ -39,6 +40,12 @@ const pageDescription = description || t(lang, 'meta.description');
 
 const SITE_URL = 'https://vkvstudio.com';
 
+// JSON-LD is injected via set:html (raw). Escape '<' so a data string that ever
+// contains '</script' can't close the tag early and spill into raw HTML. In HTML
+// "script data state" entity refs are NOT decoded, so a Unicode escape (<),
+// not &lt;, is the correct fix — the JSON parser decodes it back to '<'.
+const ldjson = (obj: unknown): string => JSON.stringify(obj).replace(/</g, '\\u003c');
+
 // --- Canonical + hreflang: derived from the CURRENT route, never the lang root. ---
 // e.g. rawPath "/en/lab/tokenizer/" -> restPath "/lab/tokenizer/"
 //      rawPath "/ru/"               -> restPath "/"
@@ -56,7 +63,7 @@ const xDefaultUrl = alternateUrls.en;
 // section renders, so markup and copy cannot drift apart.
 // Why it had to move: the identical six questions were emitted on ALL 12 pages
 // while appearing in the body of none, so the privacy policy was carrying
-// "Can I hire Valery?" in its structured data. Google requires marked-up
+// "Can I hire Valerii?" in its structured data. Google requires marked-up
 // content to be visible. (Note this is a JS comment, not an HTML one — the
 // previous version of this note was an HTML comment and therefore shipped the
 // word "FAQPage" to every page it was supposed to have been removed from.)
@@ -132,6 +139,25 @@ const ogImageAlt =
       )
     }
 
+    {
+      /* Web app manifest — so "Install app" gives the site its own name, icon and
+         colour instead of a bare shortcut with a screenshot of the favicon.
+         Deliberately manifest-ONLY: there is no service worker and there should
+         not be one. A static portfolio gains almost nothing from offline caching,
+         and a service worker is the standard way to keep serving a stale bundle
+         after a deploy — the exact failure this site already met once today, from
+         a different direction. Installability without a cache is the honest half
+         of the feature: the part that helps, without the part that lies about
+         what version you are looking at.
+
+         `theme_color` is repeated as a meta tag because the manifest colour only
+         applies once installed; the meta tag colours the address bar for everyone
+         else on mobile. Both are --bg-void, so the browser chrome continues the
+         page instead of framing it. */
+    }
+    <link rel="manifest" href="/site.webmanifest" />
+    <meta name="theme-color" content="#060709" />
+
     <!-- Canonical: self-referential — this page's own URL, NEVER the lang root -->
     <link rel="canonical" href={canonicalUrl} />
 
@@ -192,13 +218,36 @@ const ogImageAlt =
     <title>{pageTitle}</title>
 
     <!-- Favicon (placeholder) -->
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    {
+      /* The old favicon.svg was a 480-byte placeholder — a grey square with a
+         green chevron — and the comment beside it had said "placeholder" long
+         enough for that to stop being temporary. These are the real monogram,
+         thickened and flattened to one brand colour so it survives being drawn
+         at 16 pixels; the original wireframe averages to muddy teal at that
+         size. Two sizes because 16px browsers downscale 32 cleanly, while the
+         48 is what Windows uses for pinned shortcuts. */
+    }
+    <!-- 16 and 32 are drawn by hand at those exact sizes, not reduced from the
+         master: at 16 px this monogram merges under any filter, so the small
+         sizes are a separate drawing. 48 is a clean downscale of the 512, which
+         works now that the master is the simplified ringless mark. -->
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+    <link rel="icon" type="image/png" sizes="48x48" href="/favicon-48.png" />
+    {
+      /* iOS does not read the web manifest for "Add to Home Screen" — without
+         this link Safari uses a screenshot of the page, which at icon size is an
+         unreadable grey rectangle. Full-bleed on purpose: Apple rounds the
+         corners itself and applies no mask, so the safe-area padding the
+         maskable icons need would only shrink the artwork here for nothing. */
+    }
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 
     <!-- JSON-LD Structured Data -->
 
     <!-- One connected graph, not three disconnected copies of the same human.
          Every node carries an @id and references the others by @id, so a search
-         engine resolves "Valery Karpov", "VKVstudio" and this website to one
+         engine resolves "Valerii Karpov", "VKVstudio" and this website to one
          entity instead of guessing. The Organization node exists to state, in
          machine-readable form, that there is a REGISTERED business behind the
          site — the state registration number, taxpayer number and activity code
@@ -208,7 +257,7 @@ const ogImageAlt =
          to locate a person. -->
     <script
       type="application/ld+json"
-      set:html={JSON.stringify({
+      set:html={ldjson({
         '@context': 'https://schema.org',
         '@type': 'WebSite',
         '@id': `${SITE_URL}/#website`,
@@ -221,12 +270,12 @@ const ogImageAlt =
 
     <script
       type="application/ld+json"
-      set:html={JSON.stringify({
+      set:html={ldjson({
         '@context': 'https://schema.org',
         '@type': 'Organization',
         '@id': `${SITE_URL}/#organization`,
         name: 'VKVstudio',
-        legalName: 'Karpov Valeriy Ivanovich, Individual Entrepreneur',
+        legalName: 'Karpov Valerii, Individual Entrepreneur',
         alternateName: 'ԿԱՐՊՈՎ ՎԱԼԵՐԻ ԻՎԱՆԻ, Անհատ ձեռնարկատեր',
         url: `${SITE_URL}/`,
         email: CONTACT_EMAIL,
@@ -241,7 +290,12 @@ const ogImageAlt =
         // business. If an invoice or a partner form ever needs the ՀՎՀՀ, it
         // belongs in that document, not in the site's structured data.
         foundingDate: '2026-02-12',
-        logo: `${SITE_URL}/vkv-logo.png`,
+        // The emblem the site actually wears: browser tab, installed app icon,
+        // home screen. This pointed at vkv-logo.png, a 1024px mark superseded
+        // in August and referenced from nowhere else — so structured data was
+        // handing crawlers a logo no visitor had ever seen, and half a megabyte
+        // of it was uploaded on every deploy to serve that one line.
+        logo: `${SITE_URL}/icon-512.png`,
         // NACE 62.01 / ISIC 6201 — computer programming activities.
         isicV4: '6201',
         address: {
@@ -259,17 +313,18 @@ const ogImageAlt =
 
     <script
       type="application/ld+json"
-      set:html={JSON.stringify({
+      set:html={ldjson({
         '@context': 'https://schema.org',
         '@type': 'Person',
         '@id': `${SITE_URL}/#person`,
-        name: 'Valery Karpov',
-        givenName: 'Valery',
+        name: 'Valerii Karpov',
+        givenName: 'Valerii',
         familyName: 'Karpov',
-        url: 'https://vkvstudio.com',
+        url: `${SITE_URL}/`,
         email: CONTACT_EMAIL,
         jobTitle: 'AI Architect & Web Engineer',
         worksFor: { '@id': `${SITE_URL}/#organization` },
+        // (url set below to the templated SITE_URL, matching WebSite/Organization)
         address: {
           '@type': 'PostalAddress',
           addressLocality: 'Gyumri',
@@ -304,12 +359,54 @@ const ogImageAlt =
       })}
     />
 
+    <!-- Per-page WebPage node: ties THIS canonical URL + its language back to the
+         WebSite entity, so each page is a distinct node in the graph rather than
+         three identical sitewide nodes with nothing page-specific. -->
+    <script
+      type="application/ld+json"
+      set:html={ldjson({
+        '@context': 'https://schema.org',
+        '@type': 'WebPage',
+        '@id': `${canonicalUrl}#webpage`,
+        url: canonicalUrl,
+        name: pageTitle,
+        description: pageDescription,
+        inLanguage: lang,
+        isPartOf: { '@id': `${SITE_URL}/#website` },
+      })}
+    />
+
     <!-- Per-page JSON-LD (SoftwareApplication for Lab tools, BreadcrumbList, ...) -->
-    {jsonLd.map((node) => <script type="application/ld+json" set:html={JSON.stringify(node)} />)}
+    {jsonLd.map((node) => <script type="application/ld+json" set:html={ldjson(node)} />)}
   </head>
   <body>
+    <!--email_off-->
+    <!--
+      Cloudflare's Email Address Obfuscation rewrites every address it finds into
+      `[email protected]` plus a /cdn-cgi/l/email-protection link, decoded by an
+      injected script. That is a reasonable trade for a page full of addresses
+      harvested by spambots. This site has exactly one, it is a business contact
+      that exists to be found, and the rewrite made it a placeholder for every
+      consumer that does not run JavaScript — crawlers, AI assistants reading the
+      page, and anyone viewing source. The site's only conversion path read as
+      broken to precisely the audiences it is trying to reach.
+
+      `email_off` is Cloudflare's own documented opt-out and it is scoped to what
+      it wraps, so this stays a markup decision in the repository rather than a
+      dashboard setting nobody remembers making.
+    -->
     <a href="#main-content" class="skip-link">{t(lang, 'a11y.skipToContent')}</a>
     <slot />
+    {
+      /*
+      Here rather than in each page, because when it was per-page only one page
+      imported it. Ten of twelve ended with no footer, no Privacy link and — the
+      part that actually stranded people — no language switcher, on a bilingual
+      site whose Lab pages are what strangers land on from search.
+    */
+    }
+    <Footer lang={lang} />
     <CookieConsent lang={lang} client:idle />
+    <!--/email_off-->
   </body>
 </html>

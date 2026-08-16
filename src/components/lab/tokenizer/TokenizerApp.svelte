@@ -107,7 +107,9 @@
   }>({ visible: false, x: 0, y: 0, token: null });
 
   function showTooltip(
-    e: MouseEvent | TouchEvent,
+    // KeyboardEvent belongs here: every token is role="button" with tabindex="0"
+    // and an onkeydown handler, so Enter and Space reach this function too.
+    e: MouseEvent | TouchEvent | KeyboardEvent,
     token: { id: number; text: string; bytes: number[]; partial?: boolean }
   ) {
     const pointer = pointerXY(e);
@@ -184,7 +186,10 @@
   // — see engine.ts: some "verified" counts are real API round-trips against a
   // DIFFERENT underlying model, and the tooltip must disclose that honestly
   // rather than showing the unqualified "Verified — provider API count").
-  function getAccuracyInfo(res: TokenResult | null, forModel: ModelId): {
+  function getAccuracyInfo(
+    res: TokenResult | null,
+    forModel: ModelId
+  ): {
     emoji: string;
     label: string;
     tooltip: string;
@@ -537,6 +542,7 @@
               class="tokenizer__mode-btn {viewMode === 'blocks'
                 ? 'tokenizer__mode-btn--active'
                 : ''}"
+              aria-pressed={viewMode === 'blocks'}
               onclick={() => (viewMode = 'blocks')}
               id="mode-blocks">{t(lang, 'tokenizer.blocks')}</button
             >
@@ -545,6 +551,7 @@
               class="tokenizer__mode-btn {viewMode === 'heatmap'
                 ? 'tokenizer__mode-btn--active'
                 : ''}"
+              aria-pressed={viewMode === 'heatmap'}
               onclick={() => (viewMode = 'heatmap')}
               id="mode-heatmap">{t(lang, 'tokenizer.heatmap')}</button
             >
@@ -695,6 +702,9 @@
                 style="--hue: {token.hue}; animation-delay: {Math.min(i, 60) * 20}ms"
                 role="button"
                 tabindex="0"
+                aria-label={t(lang, 'tokenizer.tokenAriaLabel')
+                  .replace('{id}', String(token.id))
+                  .replace('{text}', token.text)}
                 onmousemove={(e) => showTooltip(e, token)}
                 onmouseleave={hideTooltip}
                 onclick={(e) => {

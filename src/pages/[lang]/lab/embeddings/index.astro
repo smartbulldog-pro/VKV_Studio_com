@@ -52,7 +52,7 @@ const jsonLd = [
     '@type': 'SoftwareApplication',
     name: 'Embedding Space Explorer',
     applicationCategory: 'DeveloperApplication',
-    operatingSystem: 'Web',
+    operatingSystem: 'All',
     url: toolUrl,
     description: meta.description,
     featureList:
@@ -86,8 +86,8 @@ const jsonLd = [
             'Matryoshka embedding truncation (768/512/256/128 dims)',
           ],
     // @id reference, NOT a fresh inline Person. Inlining one here created a
-    // SECOND, anonymous "Valery" node on the same page alongside the
-    // "Valery Karpov" defined in BaseLayout — the exact entity fragmentation
+    // SECOND, anonymous "Valerii" node on the same page alongside the
+    // "Valerii Karpov" defined in BaseLayout — the exact entity fragmentation
     // the @id graph exists to prevent. Confirmed by validator.schema.org,
     // which rendered them as two separate people.
     // Note also: this SoftwareApplication node is deliberately kept even
@@ -145,12 +145,12 @@ const jsonLd = [
           controls. Keep this breakpoint in step with that one.
         -->
         <div class="embeddings-island-slot">
-        <EmbeddingApp lang={activeLang} client:only="svelte">
-          <div class="embeddings-loading-fallback" role="status" aria-live="polite">
-            <span class="embeddings-loading-fallback__spinner" aria-hidden="true"></span>
-            <p>{t(activeLang, 'embeddings.statusLoadingModel')}</p>
-          </div>
-        </EmbeddingApp>
+          <EmbeddingApp lang={activeLang} client:only="svelte">
+            <div class="embeddings-loading-fallback" role="status" aria-live="polite">
+              <span class="embeddings-loading-fallback__spinner" aria-hidden="true"></span>
+              <p>{t(activeLang, 'embeddings.statusLoadingModel')}</p>
+            </div>
+          </EmbeddingApp>
         </div>
       </div>
     </section>

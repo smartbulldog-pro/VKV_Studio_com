@@ -483,27 +483,41 @@ STTEngine = "GemmaSTT"
 # ── Google Cloud Speech-to-Text ──────────────────────────────────────────────
 
 
-def _probe_duration_sec(audio_bytes: bytes) -> float:
-    """Read duration from the container header without decoding the audio.
+def _probe_audio_meta(audio_bytes: bytes) -> "tuple[float, int]":
+    """Duration in seconds and sample rate in Hz, from the container header only.
 
-    The budget below is charged in SECONDS, so the length has to be known BEFORE
-    the request goes out — decoding the whole clip just to measure it would cost
-    more than the transcription. PyAV exposes the container duration in
-    microseconds; falls back to 0.0 when the header does not carry one, which the
-    caller treats as "unknown" rather than "free".
+    Both come from one open. The budget is charged in SECONDS, so the length has
+    to be known BEFORE the request goes out — decoding the whole clip just to
+    measure it would cost more than the transcription. The RATE has to be known
+    because Google requires `sampleRateHertz` for the Opus encodings and refuses
+    the request without it:
+
+        Invalid recognition 'config': Opus sample rate (0) not in supported
+        rates 8000, 12000, 16000, 24000, 48000
+
+    That is a real 400 from the live API, returned by the first genuine call this
+    backend ever made. It would have hit every voice request in production, where
+    the browser sends WebM/Opus — the class docstring's warning that the request
+    shape was never verified turned out to be worth exactly what it said.
+
+    Returns 0 for either value when the header does not carry it: the caller
+    treats an unknown duration as "charge a conservative estimate" and an unknown
+    rate as "fall back to the encoding's natural rate".
     """
     try:
         import av  # type: ignore[import-untyped]
 
         with av.open(io.BytesIO(audio_bytes)) as container:
-            if container.duration:
-                return float(container.duration) / 1_000_000.0
             astream = container.streams.audio[0] if container.streams.audio else None
+            rate = int(getattr(astream, "rate", 0) or 0) if astream is not None else 0
+            if container.duration:
+                return float(container.duration) / 1_000_000.0, rate
             if astream is not None and astream.duration and astream.time_base:
-                return float(astream.duration * astream.time_base)
+                return float(astream.duration * astream.time_base), rate
+            return 0.0, rate
     except Exception:  # noqa: BLE001 — a probe must never be the reason a request fails
         pass
-    return 0.0
+    return 0.0, 0
 
 
 def _sniff_opus_encoding(audio_bytes: bytes) -> str:
@@ -521,6 +535,13 @@ def _sniff_opus_encoding(audio_bytes: bytes) -> str:
         return "OGG_OPUS"
     if audio_bytes.startswith(b"RIFF"):
         return "LINEAR16"
+    # MP3 was missing, so it fell through to the WEBM_OPUS default below — which
+    # is how a round-trip test holding Chirp's own MP3 earned an Opus error.
+    # ID3v2 tag, or a bare MPEG frame sync (eleven set bits).
+    if audio_bytes.startswith(b"ID3") or (
+        len(audio_bytes) > 1 and audio_bytes[0] == 0xFF and (audio_bytes[1] & 0xE0) == 0xE0
+    ):
+        return "MP3"
     return "WEBM_OPUS"
 
 
@@ -687,7 +708,7 @@ class GoogleSTT:
                 f"recognize endpoint accepts about {GOOGLE_STT_MAX_BYTES / 1048576:.0f} MB"
             )
 
-        duration = _probe_duration_sec(audio_bytes)
+        duration, sample_rate = _probe_audio_meta(audio_bytes)
         if duration > GOOGLE_STT_MAX_SECONDS:
             raise ValueError(
                 f"clip is {duration:.0f}s; the synchronous recognize endpoint tops out "
@@ -697,15 +718,27 @@ class GoogleSTT:
         # estimate rather than nothing.
         self._budget.charge(duration if duration > 0 else 10.0)
 
+        encoding = _sniff_opus_encoding(audio_bytes)
+        # Google REQUIRES a rate for the Opus encodings and validates it against
+        # the stream for the rest, so send what the container actually reports.
+        # 48000 is a fallback for the Opus cases only, and only because Opus is
+        # always 48 kHz internally and the browser's MediaRecorder emits exactly
+        # that — a guess that is right for the one case where a header might not
+        # parse. Anything else sends no rate rather than a fabricated one.
+        if not sample_rate and encoding in ("WEBM_OPUS", "OGG_OPUS"):
+            sample_rate = 48000
+
         body = {
             "config": {
-                "encoding": _sniff_opus_encoding(audio_bytes),
+                "encoding": encoding,
                 "languageCode": GOOGLE_STT_LANGUAGE,
                 "enableAutomaticPunctuation": True,
                 "model": GOOGLE_STT_MODEL,
             },
             "audio": {"content": base64.b64encode(audio_bytes).decode("ascii")},
         }
+        if sample_rate:
+            body["config"]["sampleRateHertz"] = sample_rate
         if GOOGLE_STT_ALT_LANGUAGES:
             body["config"]["alternativeLanguageCodes"] = GOOGLE_STT_ALT_LANGUAGES
 
@@ -745,8 +778,8 @@ class GoogleSTT:
             lang = "en"
 
         logger.info(
-            "Google STT: %d result(s), %d chars, lang=%s (api=%s), %.1fs audio",
-            len(results), len(text), lang, api_lang or "-", duration,
+            "Google STT: %d result(s), %d chars, lang=%s (api=%s), %.1fs audio, %s @ %dHz",
+            len(results), len(text), lang, api_lang or "-", duration, encoding, sample_rate,
         )
         return TranscriptionResult(
             text=text, language=lang, language_prob=float(prob), duration=float(duration)

@@ -45,8 +45,8 @@ export const FAQ: FaqItem[] = [
       ru: 'Где на самом деле работает модель?',
     },
     a: {
-      en: 'On a server, through llama.cpp — a four-core ARM machine. The first question takes about twenty seconds, and almost all of that is the model reading the system prompt and the facts it looks up before it writes a word. Every question after it in the same conversation reuses that reading and comes back in about six. The browser only sends the question and renders the answer. Nothing about the model runs on your device.',
-      ru: 'На сервере, через llama.cpp — это четырёхъядерная ARM-машина. Первый вопрос занимает секунд двадцать, и почти всё это время модель читает системный промпт и подтянутые факты, прежде чем написать хоть слово. Каждый следующий вопрос в том же диалоге переиспользует прочитанное и возвращается секунд за шесть. Браузер только отправляет вопрос и показывает ответ. На вашем устройстве не выполняется ничего.',
+      en: 'On a server, through llama.cpp — a four-core ARM machine with no GPU. Expect roughly thirty to forty-five seconds for a full first answer. Most of that is the model reading the system prompt and the facts it looks up before it writes a word; the first words appear sooner, around twenty seconds in, and the rest arrives as it is written. Later questions in the same conversation reuse that reading and are noticeably faster. The browser only sends the question and renders the answer — nothing about the model runs on your device.',
+      ru: 'На сервере, через llama.cpp — это четырёхъядерная ARM-машина без GPU. На полный первый ответ закладывайте секунд тридцать-сорок пять. Большая часть этого времени — модель читает системный промпт и подтянутые факты, прежде чем написать хоть слово; первые слова появляются раньше, секунде на двадцатой, а дальше ответ дописывается на глазах. Следующие вопросы в том же диалоге переиспользуют прочитанное и идут заметно быстрее. Браузер только отправляет вопрос и показывает ответ — на вашем устройстве не выполняется ничего.',
     },
   },
   {
@@ -75,8 +75,8 @@ export const FAQ: FaqItem[] = [
       ru: 'На чём построен этот сайт?',
     },
     a: {
-      en: 'Astro 6 with Svelte 5 islands, plain CSS with no framework, and GSAP for motion. It is a static site on Cloudflare Pages: the pages are HTML files, and JavaScript only loads for the parts that are genuinely interactive. That is why it scores 99 on desktop performance while still carrying a scroll-driven video hero.',
-      ru: 'Astro 6 со Svelte 5 в виде островов, обычный CSS без фреймворка и GSAP для анимации. Это статический сайт на Cloudflare Pages: страницы — это HTML-файлы, а JavaScript подгружается только там, где что-то действительно интерактивно. Поэтому он держит 99 баллов производительности на десктопе, имея при этом видео-hero, управляемое прокруткой.',
+      en: 'Astro 6 with Svelte 5 islands, plain CSS with no framework, and GSAP for motion. It is a static site on Cloudflare Pages: the pages are HTML files, and JavaScript only loads for the parts that are genuinely interactive. That is why it scores 100 on desktop performance while still carrying a scroll-driven video hero.',
+      ru: 'Astro 6 со Svelte 5 в виде островов, обычный CSS без фреймворка и GSAP для анимации. Это статический сайт на Cloudflare Pages: страницы — это HTML-файлы, а JavaScript подгружается только там, где что-то действительно интерактивно. Поэтому он держит 100 баллов производительности на десктопе, имея при этом видео-hero, управляемое прокруткой.',
     },
   },
   {
@@ -85,7 +85,7 @@ export const FAQ: FaqItem[] = [
       ru: 'Кто стоит за VKVstudio и это настоящий бизнес?',
     },
     a: {
-      en: 'Valery Karpov — a full-stack engineer and AI architect with 20 years of building things that had to work. VKVstudio is a sole proprietorship registered in Armenia with the Ministry of Justice State Register since February 2026, under activity code 62.01.0 (computer programming). It is one person, not an agency — but it is a registered business, and the registration details are on the privacy page.',
+      en: 'Valerii Karpov — a full-stack engineer and AI architect with 20 years of building things that had to work. VKVstudio is a sole proprietorship registered in Armenia with the Ministry of Justice State Register since February 2026, under activity code 62.01.0 (computer programming). It is one person, not an agency — but it is a registered business, and the registration details are on the privacy page.',
       ru: 'Валерий Карпов — фулстек-разработчик и AI-архитектор, двадцать лет делающий вещи, которые обязаны работать. VKVstudio — индивидуальное предприятие, зарегистрированное в Армении в Государственном регистре Министерства юстиции с февраля 2026 года, код деятельности 62.01.0 (разработка программного обеспечения). Это один человек, а не агентство, — но это зарегистрированный бизнес, и реквизиты указаны на странице политики конфиденциальности.',
     },
   },

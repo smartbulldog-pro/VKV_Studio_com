@@ -76,15 +76,55 @@ export interface ModelConfig {
   provider: Provider;
   /**
    * Minimum token count a cacheable block must reach before the provider will
-   * actually cache it — Anthropic documents ≈1024 tokens for Sonnet-tier
-   * models and ≈4096 for Opus/Haiku-tier models; OpenAI documents 1024 for
-   * automatic prompt caching. Google/DeepSeek/Alibaba/Mistral/Zhipu have no
-   * minimum documented here as of 2026-07-09 in the sources already cited in
-   * this file's price comments — a conservative 1024 is used for them rather
+   * actually cache it. Anthropic publishes this PER MODEL and the numbers do
+   * not follow the tier: 512 for Opus 5 and Fable 5, 1,024 for Opus 4.8 and
+   * every Sonnet, 4,096 for Haiku 4.5 and Opus 4.5/4.6. This file used to
+   * apply "4096 for the Opus tier" as a rule of thumb, which put the floor 8x
+   * too high on Opus 5 and Fable 5 and 4x too high on Opus 4.8 — so the tool
+   * told people caching was impossible for blocks the provider caches
+   * happily, and then exported a payload with no cache markers, making its
+   * own claim true. Re-verified 2026-08-15 against
+   * platform.claude.com/docs/en/docs/build-with-claude/prompt-caching.
+   * OpenAI documents 1,024 for automatic prompt caching. Google/DeepSeek/
+   * Alibaba/Mistral/Zhipu have no minimum documented in the sources cited in
+   * this file's price comments — a conservative 1,024 is used for them rather
    * than fabricating a provider-specific figure; treat those rows' floor as a
    * placeholder, not a verified number.
+   *
+   * KNOWN GAP, deliberately not fixed here: Anthropic measures this minimum on
+   * the CUMULATIVE PREFIX up to and including the breakpoint, and a cache hit
+   * covers that whole prefix — not the marked block alone. This file applies
+   * the floor per block and counts savings per block, so it under-states both
+   * eligibility and savings. Both errors are conservative, and correcting them
+   * means moving from a per-block model to a prefix model, which touches the
+   * eligibility panel and the export together. Worth doing; not worth doing
+   * hastily.
    */
   minCacheTokens: number;
+  /**
+   * A long-context pricing TIER: past `thresholdTokens` in the prompt, the
+   * WHOLE request reprices at these rates — not a marginal surcharge on the
+   * tokens above the line. Omitted for models with no such tier.
+   *
+   * This existed for two months as a comment admitting the tool silently
+   * under-estimated by ~2x input on any long prompt, on the grounds that a
+   * partial implementation would be worse than an honest gap. That was the
+   * right call while it was one provider; it stopped being right when the
+   * tool's DEFAULT model turned out to have a tier at 200k and a context
+   * window of 1,048,576 — the budget bar was inviting people to fill a
+   * million tokens and quoting them half the price. A cost calculator that
+   * is wrong by 2x on its default model is not a cost calculator.
+   *
+   * Cache reads follow the tiered input price (a cache read is defined as a
+   * fraction of input), which is what both providers publish: OpenAI's
+   * long-context cached input is exactly 0.1x the long-context input price.
+   */
+  longContext?: {
+    /** Prompt size at which the tier switches, in tokens. */
+    thresholdTokens: number;
+    inputPrice: number;
+    outputPrice: number;
+  };
   /**
    * Multiplier applied to the FINAL (already cache-discounted) call cost when
    * the user opts into the provider's batch/asynchronous API — 0.5 for
@@ -108,10 +148,10 @@ export interface ModelConfig {
 // noted below; rows without a live-verify note keep the prior documented estimate.
 // Prices reconciled with .system/models_june_2026.md (re-dated 2026-07-09).
 //
-// `minCacheTokens` / `batchDiscount` (added Phase B, 2026-07-09): Anthropic
-// documents a ≈1024-token minimum cacheable prefix for Sonnet-tier models and
-// ≈4096 tokens for Opus/Haiku/Fable-tier models; OpenAI documents 1024 for its
-// automatic prompt caching. Both document a −50% batch-API discount. Google/
+// `minCacheTokens` / `batchDiscount` (added Phase B, 2026-07-09; floors
+// corrected per-model 2026-08-15 — see the field's doc comment, the tier rule
+// of thumb was wrong); OpenAI documents 1024 for its automatic prompt
+// caching. Both document a −50% batch-API discount. Google/
 // DeepSeek/Alibaba/Mistral/Zhipu have no minimum documented in the sources
 // already cited per-row below, so they get a conservative 1024 placeholder
 // (NOT a verified number) and no batch discount (undefined — not guessed).
@@ -147,7 +187,23 @@ const MODELS_BASE: ModelConfigBase[] = [
   // guarded by tests/unit/model-roster.test.ts. Left as a record of why the
   // rename happened, not as an open warning: read as current, it sent you
   // looking for a mismatch that no longer exists.
-  { id: 'gemini-3.1-pro',   name: 'Gemini 3.1 Pro',       contextWindow: 1048576, inputPrice: 2.00,  outputPrice: 12.00, supportsCaching: true,  cacheWriteMultiplier: 1.0,  cacheReadMultiplier: 0.10, provider: 'google', minCacheTokens: 1024 },
+  // longContext added 2026-08-15: Google publishes $4.00/$18.00 for prompts
+  // over 200k on this model, and this is the tool's DEFAULT selection with a
+  // 1,048,576-token window — so the budget bar was inviting people five times
+  // past the threshold at half the price. Source: ai.google.dev pricing.
+  {
+    id: 'gemini-3.1-pro',
+    name: 'Gemini 3.1 Pro',
+    contextWindow: 1048576,
+    inputPrice: 2.0,
+    outputPrice: 12.0,
+    supportsCaching: true,
+    cacheWriteMultiplier: 1.0,
+    cacheReadMultiplier: 0.1,
+    provider: 'google',
+    minCacheTokens: 1024,
+    longContext: { thresholdTokens: 200000, inputPrice: 4.0, outputPrice: 18.0 },
+  },
   // Repriced 2026-07-09 (was $0.15/$0.60 — ~10x under live). Live-verified via
   // openrouter.ai (google/gemini-3.5-flash): prompt $0.0000015, completion
   // $0.000009 → $1.50/$9.00 per 1M. cacheReadMultiplier from the same raw
@@ -156,73 +212,209 @@ const MODELS_BASE: ModelConfigBase[] = [
   // price and reads as a per-hour storage-style fee, not a first-call write
   // premium in this field's sense — kept at the documented 1.0 (full price to
   // populate the cache) rather than reinterpreting an ambiguous live number.
-  { id: 'gemini-3.5-flash', name: 'Gemini 3.5 Flash',     contextWindow: 1048576, inputPrice: 1.50,  outputPrice: 9.00,  supportsCaching: true,  cacheWriteMultiplier: 1.0,  cacheReadMultiplier: 0.10, provider: 'google', minCacheTokens: 1024 },
-  // New 2026-08-09. Source: ai.google.dev/gemini-api/docs/pricing. No batch
-  // discount documented for this row (same as the other Google/DeepSeek/
-  // Alibaba/Mistral/Zhipu rows here) — omitted rather than guessed.
-  { id: 'gemini-3.6-flash', name: 'Gemini 3.6 Flash',     contextWindow: 1048576, inputPrice: 1.50,  outputPrice: 7.50,  supportsCaching: true,  cacheWriteMultiplier: 1.0,  cacheReadMultiplier: 0.10, provider: 'google', minCacheTokens: 1024 },
-  { id: 'gemma-4-e2b',      name: 'Gemma 4 E2B (local)',  contextWindow: 32000,   inputPrice: 0,     outputPrice: 0,     supportsCaching: false, cacheWriteMultiplier: 1.0,  cacheReadMultiplier: 1.0, provider: 'local', minCacheTokens: 1024 },
+  {
+    id: 'gemini-3.5-flash',
+    name: 'Gemini 3.5 Flash',
+    contextWindow: 1048576,
+    inputPrice: 1.5,
+    outputPrice: 9.0,
+    supportsCaching: true,
+    cacheWriteMultiplier: 1.0,
+    cacheReadMultiplier: 0.1,
+    provider: 'google',
+    minCacheTokens: 1024,
+  },
+  // REPRICED 2026-08-15 — this row was showing exactly DOUBLE the live price
+  // ($1.50/$7.50 against a real $0.75/$3.75). ai.google.dev publishes two
+  // columns for this model, "through Dec 31, 2026" and "Jan 1, 2027 onwards",
+  // and the 2026-08-09 pass read the wrong one. Being 2x wrong on a Google
+  // model is the single worst kind of error this table can hold.
+  // >>> The published increase to $1.50/$7.50 takes effect 2027-01-01. Unlike
+  //     the Sonnet 5 note below, this one has not been cancelled — check it,
+  //     do not just apply it. <<<
+  // No batch discount documented for this row (same as the other Google/
+  // DeepSeek/Alibaba/Mistral/Zhipu rows here) — omitted rather than guessed.
+  {
+    id: 'gemini-3.6-flash',
+    name: 'Gemini 3.6 Flash',
+    contextWindow: 1048576,
+    inputPrice: 0.75,
+    outputPrice: 3.75,
+    supportsCaching: true,
+    cacheWriteMultiplier: 1.0,
+    cacheReadMultiplier: 0.1,
+    provider: 'google',
+    minCacheTokens: 1024,
+  },
+  // New 2026-08-15. Same published price and terms as 3.6 Flash, same 2027
+  // step. Source: ai.google.dev/gemini-api/docs/pricing.
+  {
+    id: 'gemini-3.7-flash',
+    name: 'Gemini 3.7 Flash',
+    contextWindow: 1048576,
+    inputPrice: 0.75,
+    outputPrice: 3.75,
+    supportsCaching: true,
+    cacheWriteMultiplier: 1.0,
+    cacheReadMultiplier: 0.1,
+    provider: 'google',
+    minCacheTokens: 1024,
+  },
+  {
+    id: 'gemma-4-e2b',
+    name: 'Gemma 4 E2B (local)',
+    contextWindow: 32000,
+    inputPrice: 0,
+    outputPrice: 0,
+    supportsCaching: false,
+    cacheWriteMultiplier: 1.0,
+    cacheReadMultiplier: 1.0,
+    provider: 'local',
+    minCacheTokens: 1024,
+  },
   // Anthropic
   // Fable 5 priced above Opus intentionally — it is Anthropic's flagship model,
   // above the Opus tier, per .system/models_june_2026.md ($10/$50) and current
   // published pricing. Not a bug: Fable 5 > Opus 4.8 > Sonnet 5 is the correct order.
-  { id: 'claude-fable-5',   name: 'Claude Fable 5',       contextWindow: 1000000, inputPrice: 10.00, outputPrice: 50.00, supportsCaching: true,  cacheWriteMultiplier: 1.25, cacheReadMultiplier: 0.10, provider: 'anthropic', minCacheTokens: 4096, batchDiscount: 0.5 },
-  { id: 'claude-opus-4.8',  name: 'Claude Opus 4.8',      contextWindow: 1000000, inputPrice: 5.00,  outputPrice: 25.00, supportsCaching: true,  cacheWriteMultiplier: 1.25, cacheReadMultiplier: 0.10, provider: 'anthropic', minCacheTokens: 4096, batchDiscount: 0.5 },
+  {
+    id: 'claude-fable-5',
+    name: 'Claude Fable 5',
+    contextWindow: 1000000,
+    inputPrice: 10.0,
+    outputPrice: 50.0,
+    supportsCaching: true,
+    cacheWriteMultiplier: 1.25,
+    cacheReadMultiplier: 0.1,
+    provider: 'anthropic',
+    minCacheTokens: 512,
+    batchDiscount: 0.5,
+  },
+  {
+    id: 'claude-opus-4.8',
+    name: 'Claude Opus 4.8',
+    contextWindow: 1000000,
+    inputPrice: 5.0,
+    outputPrice: 25.0,
+    supportsCaching: true,
+    cacheWriteMultiplier: 1.25,
+    cacheReadMultiplier: 0.1,
+    provider: 'anthropic',
+    minCacheTokens: 1024,
+    batchDiscount: 0.5,
+  },
   // New 2026-08-09. Source: platform.claude.com/docs/en/docs/about-claude/pricing.
   // Same $5.00/$25.00 @ 1M as claude-opus-4.8 above — kept as a separate row
   // rather than merged into/replacing it, since neither that source nor this
   // file's existing comments document claude-opus-4.8 as retired; re-check at
   // the next pass whether 4.8 is still a live model id.
-  { id: 'claude-opus-5',    name: 'Claude Opus 5',        contextWindow: 1000000, inputPrice: 5.00,  outputPrice: 25.00, supportsCaching: true,  cacheWriteMultiplier: 1.25, cacheReadMultiplier: 0.10, provider: 'anthropic', minCacheTokens: 4096, batchDiscount: 0.5 },
-  // Renamed from 'claude-sonnet-4.6' 2026-07-09. $2.00/$10.00 per 1M is INTRO
-  // pricing that Anthropic's own announcement documents as ending 2026-08-31,
-  // after which it steps to $3.00/$15.00 — re-verified 2026-08-09 (still ~3
-  // weeks out from the cutover, no change to apply yet).
-  // >>> REVISIT THIS ROW AFTER 2026-08-31 — price steps to $3.00/$15.00. <<<
-  // Source: anthropic.com/news/claude-sonnet-5. Cache multipliers (write ÷
-  // prompt = 1.25, read ÷ prompt = 0.10) live-verified 2026-07-09, unchanged.
-  { id: 'claude-sonnet-5',  name: 'Claude Sonnet 5',      contextWindow: 1000000, inputPrice: 2.00,  outputPrice: 10.00, supportsCaching: true,  cacheWriteMultiplier: 1.25, cacheReadMultiplier: 0.10, provider: 'anthropic', minCacheTokens: 1024, batchDiscount: 0.5 },
+  {
+    id: 'claude-opus-5',
+    name: 'Claude Opus 5',
+    contextWindow: 1000000,
+    inputPrice: 5.0,
+    outputPrice: 25.0,
+    supportsCaching: true,
+    cacheWriteMultiplier: 1.25,
+    cacheReadMultiplier: 0.1,
+    provider: 'anthropic',
+    minCacheTokens: 512,
+    batchDiscount: 0.5,
+  },
+  // Renamed from 'claude-sonnet-4.6' 2026-07-09. The standing instruction here
+  // was to step this row to $3.00/$15.00 after 2026-08-31 — an instruction to
+  // make the tool WRONG on a date. Anthropic cancelled that increase: the
+  // pricing page now states in as many words that $2/$10 "is now the standard
+  // price" and "the previously scheduled increase ... will not occur"
+  // (re-verified 2026-08-15). Removed rather than left as a trap for whoever
+  // reads this file in September. Cache multipliers (write ÷ prompt = 1.25,
+  // read ÷ prompt = 0.10) live-verified 2026-07-09, unchanged.
+  {
+    id: 'claude-sonnet-5',
+    name: 'Claude Sonnet 5',
+    contextWindow: 1000000,
+    inputPrice: 2.0,
+    outputPrice: 10.0,
+    supportsCaching: true,
+    cacheWriteMultiplier: 1.25,
+    cacheReadMultiplier: 0.1,
+    provider: 'anthropic',
+    minCacheTokens: 1024,
+    batchDiscount: 0.5,
+  },
   // Renamed id 2026-08-09: 'claude-haiku' is not a valid Anthropic model id
   // (a real API call would 400) — the current generation is Haiku 4.5, and
   // there is no "Haiku 5". Display name ("Claude Haiku") and the $1.00/$5.00
   // @ 200K pricing are unchanged. Source:
   // platform.claude.com/docs/en/docs/about-claude/pricing.
-  { id: 'claude-haiku-4-5', name: 'Claude Haiku 4.5',     contextWindow: 200000,  inputPrice: 1.00,  outputPrice: 5.00,  supportsCaching: true,  cacheWriteMultiplier: 1.25, cacheReadMultiplier: 0.10, provider: 'anthropic', minCacheTokens: 4096, batchDiscount: 0.5 },
+  {
+    id: 'claude-haiku-4-5',
+    name: 'Claude Haiku 4.5',
+    contextWindow: 200000,
+    inputPrice: 1.0,
+    outputPrice: 5.0,
+    supportsCaching: true,
+    cacheWriteMultiplier: 1.25,
+    cacheReadMultiplier: 0.1,
+    provider: 'anthropic',
+    minCacheTokens: 4096,
+    batchDiscount: 0.5,
+  },
   // OpenAI
-  // CAVEAT (documented 2026-08-09 — schema below has no field for this):
-  // GPT-5.5 and every GPT-5.6 model (sol/terra/luna) bill the ENTIRE request
-  // at 2x the input price and 1.5x the output price once the prompt exceeds
-  // 272,000 tokens — a long-context pricing-TIER switch, not a marginal
-  // per-token surcharge past the threshold. `ModelConfig` has no field to
-  // express a context-length-dependent price tier, and none is added here
-  // (out of scope for this pass — a partial/wrong implementation would be
-  // worse than an honest gap). Practical effect: `calculateCost` /
-  // `calculateCachedCost` silently UNDER-estimate cost by roughly 2x input /
-  // 1.5x output for any prompt over 272K tokens against every OpenAI row
-  // below. Source: developers.openai.com/api/docs/pricing.
-  { id: 'gpt-5.5',          name: 'GPT-5.5',              contextWindow: 1050000, inputPrice: 5.00,  outputPrice: 30.00, supportsCaching: true,  cacheWriteMultiplier: 1.0,  cacheReadMultiplier: 0.10, provider: 'openai', minCacheTokens: 1024, batchDiscount: 0.5 },
-  // cacheReadMultiplier corrected 0.5 → 0.10 2026-08-09 (re-verified against
-  // developers.openai.com/api/docs/pricing): cached input is billed at
-  // $0.50/M against the $5.00/M list price — a 0.10 multiplier of
-  // `inputPrice` — not the pre-GPT-5 "50% off cached input" policy the old
-  // 0.5 value assumed. Prices/context otherwise unchanged.
-  { id: 'gpt-5.5-pro',      name: 'GPT-5.5 Pro',          contextWindow: 1050000, inputPrice: 30.00, outputPrice: 180.00, supportsCaching: true, cacheWriteMultiplier: 1.0, cacheReadMultiplier: 0.10, provider: 'openai', minCacheTokens: 1024, batchDiscount: 0.5 },
-  // cacheReadMultiplier corrected 0.5 → 0.10 2026-08-09, same reasoning as the
-  // gpt-5.5 row above (no cache fields were live-verified for this specific
-  // row in the 2026-07-09 pass; now aligned to OpenAI's documented
-  // platform-wide cached-input policy). Prices/context otherwise unchanged.
+  // GPT-5.5 and GPT-5.5 Pro were REMOVED 2026-08-15. OpenAI no longer publishes
+  // them: `gpt-5.5` appears ZERO times on developers.openai.com/api/docs/pricing
+  // and zero times on .../docs/models, while `gpt-5.6` appears 17 times. Checked
+  // by fetching both pages and grepping the raw HTML — see the methodology note
+  // at the top of this list, which exists because a summarising fetch invented
+  // GPT-5.5 rows twice in one afternoon. This file's rule is "omitted rather
+  // than guessed", and quoting a price for a model with no published price is
+  // the same error wearing a number.
   //
-  // GPT-5.6 (sol/terra/luna) added 2026-08-09 — absent from the catalog
-  // checked 2026-07-09, now published at developers.openai.com/api/docs/pricing.
-  // (A GPT-5.5 "mini" tier was also checked for 2026-07-09 and did not exist;
-  // not re-checked today, not re-added here.) There is no GPT-5.6 "Pro" model
-  // id: "pro" is a `reasoning.mode` flag on the SAME model id, not a distinct
-  // model/price — do NOT add a `gpt-5.6-*-pro` row. All three share OpenAI's
-  // documented cache/batch terms (cacheRead 0.10, cacheWrite 1.25,
-  // batchDiscount 0.5) and the same >272K-token pricing-tier caveat above.
-  { id: 'gpt-5.6-sol',      name: 'GPT-5.6 Sol',          contextWindow: 1050000, inputPrice: 5.00,  outputPrice: 30.00, supportsCaching: true,  cacheWriteMultiplier: 1.25, cacheReadMultiplier: 0.10, provider: 'openai', minCacheTokens: 1024, batchDiscount: 0.5 },
-  { id: 'gpt-5.6-terra',    name: 'GPT-5.6 Terra',        contextWindow: 1050000, inputPrice: 2.00,  outputPrice: 12.00, supportsCaching: true,  cacheWriteMultiplier: 1.25, cacheReadMultiplier: 0.10, provider: 'openai', minCacheTokens: 1024, batchDiscount: 0.5 },
-  { id: 'gpt-5.6-luna',     name: 'GPT-5.6 Luna',         contextWindow: 1050000, inputPrice: 0.20,  outputPrice: 1.20,  supportsCaching: true,  cacheWriteMultiplier: 1.25, cacheReadMultiplier: 0.10, provider: 'openai', minCacheTokens: 1024, batchDiscount: 0.5 },
+  // Long-context tiers ARE modelled (see `longContext` on ModelConfig) rather
+  // than left as a comment admitting the tool under-estimates. They belong to
+  // the GPT-5.6 family, whose rows carry Short-context and Long-context columns
+  // in the published table; the output step is 1.5x, not 2x ($30 -> $45 on Sol).
+  {
+    id: 'gpt-5.6-sol',
+    name: 'GPT-5.6 Sol',
+    contextWindow: 1050000,
+    inputPrice: 5.0,
+    outputPrice: 30.0,
+    supportsCaching: true,
+    cacheWriteMultiplier: 1.25,
+    cacheReadMultiplier: 0.1,
+    provider: 'openai',
+    minCacheTokens: 1024,
+    batchDiscount: 0.5,
+    longContext: { thresholdTokens: 272000, inputPrice: 10.0, outputPrice: 45.0 },
+  },
+  {
+    id: 'gpt-5.6-terra',
+    name: 'GPT-5.6 Terra',
+    contextWindow: 1050000,
+    inputPrice: 2.0,
+    outputPrice: 12.0,
+    supportsCaching: true,
+    cacheWriteMultiplier: 1.25,
+    cacheReadMultiplier: 0.1,
+    provider: 'openai',
+    minCacheTokens: 1024,
+    batchDiscount: 0.5,
+    longContext: { thresholdTokens: 272000, inputPrice: 4.0, outputPrice: 18.0 },
+  },
+  {
+    id: 'gpt-5.6-luna',
+    name: 'GPT-5.6 Luna',
+    contextWindow: 1050000,
+    inputPrice: 0.2,
+    outputPrice: 1.2,
+    supportsCaching: true,
+    cacheWriteMultiplier: 1.25,
+    cacheReadMultiplier: 0.1,
+    provider: 'openai',
+    minCacheTokens: 1024,
+    batchDiscount: 0.5,
+    longContext: { thresholdTokens: 272000, inputPrice: 0.4, outputPrice: 1.8 },
+  },
   //
   // DeepSeek
   // Split into Pro/Flash 2026-07-09 (was one 'deepseek-v4' row). Both
@@ -231,14 +423,36 @@ const MODELS_BASE: ModelConfigBase[] = [
   // cacheReadMultiplier = input_cache_read ÷ prompt = 0.000000003625 ÷
   // 0.000000435 ≈ 0.0083 (DeepSeek's cache-hit discount is steeper than the
   // previously-documented 0.10 estimate — kept at full live precision here).
-  { id: 'deepseek-v4-pro',  name: 'DeepSeek V4 Pro',      contextWindow: 1048576, inputPrice: 0.44,  outputPrice: 0.87,  supportsCaching: true,  cacheWriteMultiplier: 1.0,  cacheReadMultiplier: 0.0083, provider: 'deepseek', minCacheTokens: 1024 },
+  {
+    id: 'deepseek-v4-pro',
+    name: 'DeepSeek V4 Pro',
+    contextWindow: 1048576,
+    inputPrice: 0.44,
+    outputPrice: 0.87,
+    supportsCaching: true,
+    cacheWriteMultiplier: 1.0,
+    cacheReadMultiplier: 0.0083,
+    provider: 'deepseek',
+    minCacheTokens: 1024,
+  },
   // Flash REPRICED 2026-08-09 (was $0.09/$0.18 — sourced 2026-07-09 from
   // OpenRouter's top-level `pricing` field, a reseller rate, not DeepSeek's
   // own price). Re-verified against api-docs.deepseek.com/quick_start/pricing:
   // $0.14/$0.28 per 1M. cacheReadMultiplier corrected 0.20 → 0.02 from the
   // same source (documented cache-hit price is $0.028/M against the $0.14/M
   // input price — the old 0.20 was computed off the wrong base price).
-  { id: 'deepseek-v4-flash',name: 'DeepSeek V4 Flash',    contextWindow: 1048576, inputPrice: 0.14,  outputPrice: 0.28,  supportsCaching: true,  cacheWriteMultiplier: 1.0,  cacheReadMultiplier: 0.02, provider: 'deepseek', minCacheTokens: 1024 },
+  {
+    id: 'deepseek-v4-flash',
+    name: 'DeepSeek V4 Flash',
+    contextWindow: 1048576,
+    inputPrice: 0.14,
+    outputPrice: 0.28,
+    supportsCaching: true,
+    cacheWriteMultiplier: 1.0,
+    cacheReadMultiplier: 0.02,
+    provider: 'deepseek',
+    minCacheTokens: 1024,
+  },
   // Qwen — prices $1.25/$3.75 KEPT 2026-08-09, but flagged: re-verified
   // against alibabacloud.com/help/en/model-studio/qwen3-7-max, and $1.25/
   // $3.75 is a LIMITED-TIME 50%-off PROMOTIONAL rate on a $2.50/$7.50
@@ -246,7 +460,18 @@ const MODELS_BASE: ModelConfigBase[] = [
   // ends, and Alibaba's page does not give an end date. Re-check this row
   // more often than the normal cadence. cacheReadMultiplier corrected 0.25 →
   // 0.10, cacheWriteMultiplier corrected 1.0 → 1.25, both per the same source.
-  { id: 'qwen-3.7-max',     name: 'Qwen 3.7-Max',        contextWindow: 1000000, inputPrice: 1.25,  outputPrice: 3.75,  supportsCaching: true,  cacheWriteMultiplier: 1.25, cacheReadMultiplier: 0.10, provider: 'alibaba', minCacheTokens: 1024 },
+  {
+    id: 'qwen-3.7-max',
+    name: 'Qwen 3.7-Max',
+    contextWindow: 1000000,
+    inputPrice: 1.25,
+    outputPrice: 3.75,
+    supportsCaching: true,
+    cacheWriteMultiplier: 1.25,
+    cacheReadMultiplier: 0.1,
+    provider: 'alibaba',
+    minCacheTokens: 1024,
+  },
   // Mistral Large 3 — REPRICED 2026-08-09. The previous $2.00/$6.00 (kept
   // through the 2026-07-09 pass as "corroborated but not primary-verified")
   // turned out to be Mistral LARGE 2's price — a different model, not a
@@ -254,7 +479,18 @@ const MODELS_BASE: ModelConfigBase[] = [
   // mistral.ai/pricing/api: Large 3 is $0.50/$1.50 per 1M. cacheReadMultiplier
   // corrected 0.25 → 0.10 from the same source. Context (262,144, widened
   // 2026-07-09 per Mistral's model card) unchanged.
-  { id: 'mistral-large-3',  name: 'Mistral Large 3',      contextWindow: 262144,  inputPrice: 0.50,  outputPrice: 1.50,  supportsCaching: true,  cacheWriteMultiplier: 1.0,  cacheReadMultiplier: 0.10, provider: 'mistral', minCacheTokens: 1024 },
+  {
+    id: 'mistral-large-3',
+    name: 'Mistral Large 3',
+    contextWindow: 262144,
+    inputPrice: 0.5,
+    outputPrice: 1.5,
+    supportsCaching: true,
+    cacheWriteMultiplier: 1.0,
+    cacheReadMultiplier: 0.1,
+    provider: 'mistral',
+    minCacheTokens: 1024,
+  },
   // Llama 4 Scout and GLM-5.2 tokenizers are wired in engine.ts (Tokenizer
   // Profiler). Llama 4 Scout is NOT priced here: it does not appear anywhere
   // in the live OpenRouter catalog as of 2026-07-09 (checked every meta-llama/
@@ -268,7 +504,18 @@ const MODELS_BASE: ModelConfigBase[] = [
   // (unchanged). cacheReadMultiplier (0.19, from the same now-known-unreliable
   // OpenRouter listing) was NOT re-verified against the primary source in
   // this pass — treat it as unconfirmed, not corrected.
-  { id: 'glm-5.2',          name: 'GLM-5.2',              contextWindow: 1048576, inputPrice: 1.40,  outputPrice: 4.40,  supportsCaching: true,  cacheWriteMultiplier: 1.0,  cacheReadMultiplier: 0.19, provider: 'zhipu', minCacheTokens: 1024 },
+  {
+    id: 'glm-5.2',
+    name: 'GLM-5.2',
+    contextWindow: 1048576,
+    inputPrice: 1.4,
+    outputPrice: 4.4,
+    supportsCaching: true,
+    cacheWriteMultiplier: 1.0,
+    cacheReadMultiplier: 0.19,
+    provider: 'zhipu',
+    minCacheTokens: 1024,
+  },
   // Moonshot Kimi K2.7-Code was checked (live-priced on OpenRouter: $0.74/$3.50)
   // but has NO anonymously-fetchable HF fast-tokenizer (tokenizer.json 404 across
   // every Kimi K2 family repo checked — it ships a custom tiktoken.model +
@@ -307,7 +554,8 @@ export const TEMPLATES: TemplatePreset[] = [
     blocks: [
       {
         role: 'system',
-        content: 'You are a helpful, concise, and accurate AI assistant. Answer questions clearly and professionally. If you are unsure, say so.',
+        content:
+          'You are a helpful, concise, and accurate AI assistant. Answer questions clearly and professionally. If you are unsure, say so.',
         collapsed: false,
         cacheable: true,
       },
@@ -326,7 +574,8 @@ export const TEMPLATES: TemplatePreset[] = [
     blocks: [
       {
         role: 'system',
-        content: 'You are a Senior Software Engineer conducting a code review. Focus on: correctness, performance, security, and readability. Be specific and actionable.',
+        content:
+          'You are a Senior Software Engineer conducting a code review. Focus on: correctness, performance, security, and readability. Be specific and actionable.',
         collapsed: false,
         cacheable: true,
       },
@@ -351,7 +600,8 @@ export const TEMPLATES: TemplatePreset[] = [
     blocks: [
       {
         role: 'system',
-        content: 'You are a professional translator. Translate the provided text accurately, preserving tone, style, and nuance. Do not add explanations unless explicitly asked.',
+        content:
+          'You are a professional translator. Translate the provided text accurately, preserving tone, style, and nuance. Do not add explanations unless explicitly asked.',
         collapsed: false,
         cacheable: true,
       },
@@ -370,7 +620,8 @@ export const TEMPLATES: TemplatePreset[] = [
     blocks: [
       {
         role: 'system',
-        content: 'You are a precise AI assistant that answers questions exclusively based on the provided context. If the context does not contain sufficient information, state that clearly. Do not hallucinate facts.',
+        content:
+          'You are a precise AI assistant that answers questions exclusively based on the provided context. If the context does not contain sufficient information, state that clearly. Do not hallucinate facts.',
         collapsed: false,
         cacheable: true,
       },
@@ -404,7 +655,8 @@ export const TEMPLATES: TemplatePreset[] = [
     blocks: [
       {
         role: 'system',
-        content: 'You are a classifier. Follow the exact pattern shown in the examples below, then classify the final input the same way.',
+        content:
+          'You are a classifier. Follow the exact pattern shown in the examples below, then classify the final input the same way.',
         collapsed: false,
         cacheable: true,
       },
@@ -454,7 +706,8 @@ export const TEMPLATES: TemplatePreset[] = [
     blocks: [
       {
         role: 'system',
-        content: 'You are an assistant with access to tools. Use the get_weather tool when the user asks about current weather; otherwise answer directly.',
+        content:
+          'You are an assistant with access to tools. Use the get_weather tool when the user asks about current weather; otherwise answer directly.',
         collapsed: false,
         cacheable: true,
       },
@@ -468,7 +721,10 @@ export const TEMPLATES: TemplatePreset[] = [
               input_schema: {
                 type: 'object',
                 properties: {
-                  location: { type: 'string', description: 'City and country, e.g. "Paris, France"' },
+                  location: {
+                    type: 'string',
+                    description: 'City and country, e.g. "Paris, France"',
+                  },
                   unit: { type: 'string', enum: ['celsius', 'fahrenheit'] },
                 },
                 required: ['location'],
@@ -519,7 +775,10 @@ export function extractVariables(blocks: PromptBlock[]): string[] {
   for (const block of blocks) {
     let match: RegExpExecArray | null;
     while ((match = pattern.exec(block.content)) !== null) {
-      seen.add(match[1]);
+      // Group 1 always matches when the pattern does, but noUncheckedIndexedAccess
+      // widens the capture to `string | undefined`; guard rather than assert.
+      const name = match[1];
+      if (name !== undefined) seen.add(name);
     }
   }
   return Array.from(seen);
@@ -533,8 +792,11 @@ export function applyVariables(text: string, values: Record<string, string>): st
 }
 
 /** Apply variable substitution to all blocks, returning new content strings */
-export function applyVariablesToBlocks(blocks: PromptBlock[], values: Record<string, string>): PromptBlock[] {
-  return blocks.map(b => ({ ...b, content: applyVariables(b.content, values) }));
+export function applyVariablesToBlocks(
+  blocks: PromptBlock[],
+  values: Record<string, string>
+): PromptBlock[] {
+  return blocks.map((b) => ({ ...b, content: applyVariables(b.content, values) }));
 }
 
 // ─── Core Functions ───────────────────────────────────────────────────────────
@@ -602,13 +864,17 @@ export interface ChatWrappingOverheadResult {
 // 'estimated' — same order of magnitude as the Tokenizer tool's single-turn
 // `API_CHAT_OVERHEAD_ESTIMATE_TOKENS`, reused directly rather than
 // reinvented, but honestly never upgraded to 'documented' or 'native'.
-export function chatWrappingOverhead(messageCount: number, model: ModelConfig): ChatWrappingOverheadResult {
+export function chatWrappingOverhead(
+  messageCount: number,
+  model: ModelConfig
+): ChatWrappingOverheadResult {
   if (messageCount <= 0) return { overhead: 0, exactness: 'documented' };
 
   const backend = TOKENIZER_MODELS[model.id as ModelId]?.backend;
   if (backend?.type === 'tiktoken') {
     return {
-      overhead: messageCount * OPENAI_CHATML_TOKENS_PER_MESSAGE + OPENAI_CHATML_REPLY_PRIMING_TOKENS,
+      overhead:
+        messageCount * OPENAI_CHATML_TOKENS_PER_MESSAGE + OPENAI_CHATML_REPLY_PRIMING_TOKENS,
       exactness: 'documented',
     };
   }
@@ -619,12 +885,36 @@ export function chatWrappingOverhead(messageCount: number, model: ModelConfig): 
   };
 }
 
-export function calculateCost(tokens: number, model: ModelConfig): number {
-  return (tokens / 1_000_000) * model.inputPrice;
+/**
+ * The prices in force for a prompt of this size.
+ *
+ * Both tiers are flat rates over the WHOLE request, so this is a switch, not
+ * a piecewise sum: a 201k-token prompt to Gemini 3.1 Pro is billed entirely
+ * at $4.00/MTok, not 200k at $2.00 plus 1k at $4.00.
+ */
+export function pricesFor(
+  model: ModelConfig,
+  promptTokens: number
+): { inputPrice: number; outputPrice: number } {
+  const lc = model.longContext;
+  if (lc && promptTokens > lc.thresholdTokens) {
+    return { inputPrice: lc.inputPrice, outputPrice: lc.outputPrice };
+  }
+  return { inputPrice: model.inputPrice, outputPrice: model.outputPrice };
 }
 
-export function calculateOutputCost(tokens: number, model: ModelConfig): number {
-  return (tokens / 1_000_000) * model.outputPrice;
+export function calculateCost(tokens: number, model: ModelConfig): number {
+  return (tokens / 1_000_000) * pricesFor(model, tokens).inputPrice;
+}
+
+/**
+ * `promptTokens` selects the pricing tier, because a long-context tier is
+ * triggered by the size of the PROMPT and then applies to output as well.
+ * Defaults to 0 — the standard tier — so a caller that has no prompt size to
+ * hand gets the same answer this function always gave.
+ */
+export function calculateOutputCost(tokens: number, model: ModelConfig, promptTokens = 0): number {
+  return (tokens / 1_000_000) * pricesFor(model, promptTokens).outputPrice;
 }
 
 export interface CachedCostResult {
@@ -661,16 +951,21 @@ export function calculateCachedCost(
   model: ModelConfig,
   batchMultiplier = 1
 ): CachedCostResult {
-  const outputCost = calculateOutputCost(outputTokens, model);
-  const freshCost = (freshTokens / 1_000_000) * model.inputPrice;
+  // The tier is chosen by the whole prompt — cached tokens are still prompt
+  // tokens, and a cache hit does not move a request back under the threshold.
+  const promptTokens = cacheableTokens + freshTokens;
+  const { inputPrice } = pricesFor(model, promptTokens);
+  const outputCost = calculateOutputCost(outputTokens, model, promptTokens);
+  const freshCost = (freshTokens / 1_000_000) * inputPrice;
 
   if (!model.supportsCaching) {
-    const flatCost = ((cacheableTokens / 1_000_000) * model.inputPrice + freshCost + outputCost) * batchMultiplier;
+    const flatCost =
+      ((cacheableTokens / 1_000_000) * inputPrice + freshCost + outputCost) * batchMultiplier;
     return { firstCall: flatCost, cachedCall: flatCost, savingsPct: 0 };
   }
 
-  const writeCost = (cacheableTokens / 1_000_000) * model.inputPrice * model.cacheWriteMultiplier;
-  const readCost = (cacheableTokens / 1_000_000) * model.inputPrice * model.cacheReadMultiplier;
+  const writeCost = (cacheableTokens / 1_000_000) * inputPrice * model.cacheWriteMultiplier;
+  const readCost = (cacheableTokens / 1_000_000) * inputPrice * model.cacheReadMultiplier;
 
   const firstCall = (writeCost + freshCost + outputCost) * batchMultiplier;
   const cachedCall = (readCost + freshCost + outputCost) * batchMultiplier;
@@ -741,7 +1036,10 @@ function cacheEligibleBlockIds(blocks: PromptBlock[], model: ModelConfig): Set<s
  * estimate. Pure function of `blocks`/`model` — no I/O, easy to unit test in
  * isolation from the Svelte reactivity around it.
  */
-export function evaluateCacheEligibility(blocks: PromptBlock[], model: ModelConfig): CacheEligibility {
+export function evaluateCacheEligibility(
+  blocks: PromptBlock[],
+  model: ModelConfig
+): CacheEligibility {
   const cappedIds = cacheEligibleBlockIds(blocks, model);
   let eligibleCacheableTokens = 0;
   let belowFloorTokens = 0;
@@ -766,7 +1064,13 @@ export function evaluateCacheEligibility(blocks: PromptBlock[], model: ModelConf
   const exceedsBreakpointLimit =
     model.provider === 'anthropic' && eligibleBlockCount > ANTHROPIC_MAX_CACHE_BREAKPOINTS;
 
-  return { eligibleCacheableTokens, belowFloorTokens, belowFloorBlockIds, eligibleBlockCount, exceedsBreakpointLimit };
+  return {
+    eligibleCacheableTokens,
+    belowFloorTokens,
+    belowFloorBlockIds,
+    eligibleBlockCount,
+    exceedsBreakpointLimit,
+  };
 }
 
 // ─── Exports (item 1) ───────────────────────────────────────────────────────
@@ -918,7 +1222,9 @@ export function anthropicExportRoleOrderWarning(blocks: PromptBlock[]): boolean 
 export function exportAsAnthropicMessages(blocks: PromptBlock[], model: ModelConfig): string {
   const cachedIds = cacheEligibleBlockIds(blocks, model);
   const toTextBlock = (block: PromptBlock, text: string): AnthropicTextBlock =>
-    cachedIds.has(block.id) ? { type: 'text', text, cache_control: { type: 'ephemeral' } } : { type: 'text', text };
+    cachedIds.has(block.id)
+      ? { type: 'text', text, cache_control: { type: 'ephemeral' } }
+      : { type: 'text', text };
   const contextSegment = (ctx: PromptBlock): AnthropicTextBlock =>
     toTextBlock(ctx, `[CONTEXT]\n${ctx.content}\n[/CONTEXT]`);
 
@@ -1012,7 +1318,11 @@ export function exportAsOpenAIChatCompletions(blocks: PromptBlock[]): string {
  */
 export function exportAsOpenAIResponsesAPI(blocks: PromptBlock[], model: ModelConfig): string {
   const { systemText, messages, tools } = extractPromptParts(blocks);
-  const payload: Record<string, unknown> = { model: model.id, instructions: systemText, input: messages };
+  const payload: Record<string, unknown> = {
+    model: model.id,
+    instructions: systemText,
+    input: messages,
+  };
   if (tools) payload.tools = tools;
   return JSON.stringify(payload, null, 2);
 }
@@ -1021,7 +1331,9 @@ export function exportAsOpenAIResponsesAPI(blocks: PromptBlock[], model: ModelCo
  *  provider (no role remapping, no JSON structure a client library expects).
  *  Useful for pasting into a doc, chat window, or another tool by hand. */
 export function exportAsPlainText(blocks: PromptBlock[]): string {
-  return blocks.map(b => {
-    return `<|${b.role}|>\n${b.content}\n`;
-  }).join('\n');
+  return blocks
+    .map((b) => {
+      return `<|${b.role}|>\n${b.content}\n`;
+    })
+    .join('\n');
 }

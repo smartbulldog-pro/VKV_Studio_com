@@ -56,45 +56,40 @@ const cards = [
 
     {/* Cards grid */}
     <div class="lab__grid" role="list">
-      {cards.map((card, index) => (
-        <div class="lab__card-wrap js-lab-card" style={`--card-index: ${index}`} role="listitem">
-          <MagneticCard client:visible strength={0.2}>
-            <a
-              href={card.href}
-              class={`lab__card glass-panel lab__card--${card.accent}`}
-              id={`lab-card-${card.key}`}
-            >
-              {/* Hero illustration */}
-              <div class={`lab__card-visual lab__card-visual--${card.accent}`}>
-                <picture>
-                  <source srcset={card.image.replace('.jpg', '.avif')} type="image/avif" />
-                  <source srcset={card.image.replace('.jpg', '.webp')} type="image/webp" />
-                  <img
-                    src={card.image}
-                    alt={card.alt}
-                    class="lab__card-image"
-                    loading="lazy"
-                  />
-                </picture>
-              </div>
+      {
+        cards.map((card, index) => (
+          <div class="lab__card-wrap js-lab-card" style={`--card-index: ${index}`} role="listitem">
+            <MagneticCard client:visible strength={0.2}>
+              <a
+                href={card.href}
+                class={`lab__card glass-panel lab__card--${card.accent}`}
+                id={`lab-card-${card.key}`}
+              >
+                {/* Hero illustration */}
+                <div class={`lab__card-visual lab__card-visual--${card.accent}`}>
+                  <picture>
+                    <source srcset={card.image.replace('.jpg', '.avif')} type="image/avif" />
+                    <source srcset={card.image.replace('.jpg', '.webp')} type="image/webp" />
+                    <img src={card.image} alt={card.alt} class="lab__card-image" loading="lazy" />
+                  </picture>
+                </div>
 
-              {/* Content */}
-              <div class="lab__card-content">
-                <h3 class="lab__card-title">{t(lang, `lab.${card.key}.title`)}</h3>
-                <p class="lab__card-desc">{t(lang, `lab.${card.key}.description`)}</p>
-              </div>
+                {/* Content */}
+                <div class="lab__card-content">
+                  <h3 class="lab__card-title">{t(lang, `lab.${card.key}.title`)}</h3>
+                  <p class="lab__card-desc">{t(lang, `lab.${card.key}.description`)}</p>
+                </div>
 
-              {/* CTA arrow */}
-              <span class="lab__card-cta text-mono">
-                {t(lang, 'lab.open')}
-              </span>
+                {/* CTA arrow */}
+                <span class="lab__card-cta text-mono">{t(lang, 'lab.open')}</span>
 
-              {/* Hover glow overlay */}
-              <div class="lab__card-glow" aria-hidden="true"></div>
-            </a>
-          </MagneticCard>
-        </div>
-      ))}
+                {/* Hover glow overlay */}
+                <div class="lab__card-glow" aria-hidden="true" />
+              </a>
+            </MagneticCard>
+          </div>
+        ))
+      }
     </div>
   </div>
 </section>
@@ -116,11 +111,7 @@ const cards = [
     right: -5%;
     width: 50%;
     height: 70%;
-    background: radial-gradient(
-      ellipse at center,
-      hsla(225, 65%, 55%, 0.06) 0%,
-      transparent 70%
-    );
+    background: radial-gradient(ellipse at center, hsla(225, 65%, 55%, 0.06) 0%, transparent 70%);
     pointer-events: none;
   }
 
@@ -232,11 +223,7 @@ const cards = [
     left: 0;
     right: 0;
     height: 40%;
-    background: linear-gradient(
-      to top,
-      var(--glass-bg) 0%,
-      transparent 100%
-    );
+    background: linear-gradient(to top, var(--glass-bg) 0%, transparent 100%);
     pointer-events: none;
     z-index: 1;
   }
@@ -264,14 +251,16 @@ const cards = [
 
   .lab__card:hover .lab__card-visual--green {
     border-color: hsla(155, 65%, 50%, 0.35);
-    box-shadow: inset 0 0 30px hsla(155, 65%, 50%, 0.1),
-                0 0 16px hsla(155, 65%, 50%, 0.15);
+    box-shadow:
+      inset 0 0 30px hsla(155, 65%, 50%, 0.1),
+      0 0 16px hsla(155, 65%, 50%, 0.15);
   }
 
   .lab__card:hover .lab__card-visual--blue {
     border-color: hsla(225, 65%, 55%, 0.35);
-    box-shadow: inset 0 0 30px hsla(225, 65%, 55%, 0.1),
-                0 0 16px hsla(225, 65%, 55%, 0.15);
+    box-shadow:
+      inset 0 0 30px hsla(225, 65%, 55%, 0.1),
+      0 0 16px hsla(225, 65%, 55%, 0.15);
   }
 
   /* ── Card content ──────────────────────────────────────── */
@@ -321,8 +310,16 @@ const cards = [
     color: var(--accent-green-300);
   }
 
+  /* blue-300 measured 3.55:1 against this card's real background stack at
+     11.84px — below the 4.5:1 needed for normal text, and the single finding in
+     the whole audit that axe and Lighthouse report as a violation rather than a
+     judgement call. The two green cards sit at 9.16:1 on the same background.
+     Raised one step, to ~4.8:1, HERE rather than on the token: --accent-blue-300
+     has six users and four of them are borders and backgrounds, which answer to
+     a 3:1 threshold — lifting the token would repaint the Synapse terminal and
+     the tokenizer model chips to fix a link. */
   .lab__card--blue .lab__card-cta {
-    color: var(--accent-blue-300);
+    color: var(--accent-blue-200);
   }
 
   .lab__card:hover .lab__card-cta {

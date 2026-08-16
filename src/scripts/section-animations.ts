@@ -22,9 +22,7 @@ gsap.registerPlugin(ScrollTrigger);
 
 /* ── Reduced motion guard ──────────────────────────────────── */
 
-const prefersReducedMotion = window.matchMedia(
-  '(prefers-reduced-motion: reduce)'
-).matches;
+const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 /** If user prefers reduced motion, make everything visible immediately */
 function disableAnimations(): void {
@@ -41,6 +39,14 @@ function disableAnimations(): void {
 /* ── Main init ─────────────────────────────────────────────── */
 
 export function initSectionAnimations(): void {
+  // Stack hover/tap wiring attaches UNCONDITIONALLY — before the reduced-motion
+  // early return. Previously all stack hover listeners lived inside
+  // initStackAnimations(), which is skipped under reduced motion, so those
+  // users got ZERO hover feedback ever. Reduced motion means "no eased
+  // tweening", not "the interaction does not exist" — initStackHoverEffects()
+  // resolves every duration to 0 internally instead.
+  initStackHoverEffects();
+
   if (prefersReducedMotion) {
     disableAnimations();
     return;
@@ -346,94 +352,149 @@ function initStackAnimations(): void {
     );
   }
 
-  // ── Mouse tracking: glass parallax + iris reveal ──
-  const MASK_CLOSED = 28;
-  const MASK_OPEN = 65;
+}
+
+/* ── STACK CARD HOVER/TAP — frosted-fade reveal + glass parallax ──
+   NO mask, by design (tests/unit/stack-glass-reveal.test.ts enforces the
+   absence). The reveal is ONE opacity tween on the frosted glass: at rest
+   the pane fully hides the logo; on open it melts and the logo emerges with
+   its glow — the beloved pre-deploy behaviour, which (history!) only ever
+   existed because the original mask grammar was invalid and the browser
+   dropped it whole. Edge-free, identical on every logo, and
+   resolution-independent: nothing left that can silently break. */
+
+// Tunable by eye: lower = clearer logo at open. 0.3–0.6 all read well.
+const GLASS_OPEN_OPACITY = 0.35;
+
+// blur() first, matching the CSS rest filter — GSAP interpolates the pair.
+const GLOW_REST = 'blur(7px) drop-shadow(0 0 12px hsla(155, 70%, 50%, 0.3))';
+const GLOW_HOVER = 'blur(0px) drop-shadow(0 0 24px hsla(155, 70%, 50%, 0.6))';
+
+const PARALLAX_MAX = 6;
+
+// Reduced motion = duration 0 everywhere: gsap.to() with duration 0 applies
+// the end state immediately, so there is exactly ONE code path for both
+// motion preferences — no duplicate CSS block whose numbers could drift
+// (two drifting sources is the exact root cause this component regressed on).
+const OPEN_FADE_DURATION = prefersReducedMotion ? 0 : 0.65;
+const OPEN_GLOW_DURATION = prefersReducedMotion ? 0 : 0.5;
+const CLOSE_RELEASE_DURATION = prefersReducedMotion ? 0 : 0.5;
+const CLOSE_GLOW_DURATION = prefersReducedMotion ? 0 : 0.4;
+
+// Gates which USER GESTURE opens a card (mouse vs tap) — never whether the
+// visual state exists. Touch users get the identical open()/close() via click.
+const supportsHover = window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+
+function initStackHoverEffects(): void {
+  const section = document.getElementById('stack');
+  if (!section) return;
+
+  const cards = section.querySelectorAll<HTMLElement>('.js-stack-card');
+
+  // Touch singleton: at most one card open at a time (mirrors a single
+  // cursor). Holds the close() of the currently-open card.
+  let activeTapClose: (() => void) | null = null;
 
   cards.forEach((card) => {
     const glass = card.querySelector<HTMLElement>('.js-stack-glass');
     const logoImg = card.querySelector<HTMLElement>('.stack__card-logo-img');
     if (!glass) return;
 
-    const maxShift = 6;
-    const state = { maskSize: MASK_CLOSED };
+    // open()/close() are the ONLY places that touch these animated
+    // properties — for mouse and touch, for both motion preferences.
+    // `.is-open` drives the purely cosmetic CSS crossfades (ring, glass
+    // border/shadow, name color); GSAP exclusively owns everything with
+    // real motion (iris vars, glass opacity + parallax x/y, logo glow/scale).
 
-    // Set initial mask
-    applyMask(glass, MASK_CLOSED);
+    const open = () => {
+      card.classList.add('is-open');
+      // will-change only WHILE interacting — never blanket on all cards
+      // at rest (gsap-performance skill rule).
+      glass.style.willChange = 'transform, opacity';
 
-    // ── Hover: Iris opens ──
-    card.addEventListener('mouseenter', () => {
-      gsap.killTweensOf(state);
-      gsap.to(state, {
-        maskSize: MASK_OPEN,
-        duration: 0.65,
-        ease: 'power3.out',
-        onUpdate: () => applyMask(glass, state.maskSize),
-      });
-
-      // Glass becomes more transparent when open
-      gsap.to(glass, { opacity: 0.6, duration: 0.5, ease: 'power2.out' });
-
-      // Logo glows stronger
-      if (logoImg) {
-        gsap.to(logoImg, {
-          filter: 'drop-shadow(0 0 24px hsla(155, 70%, 50%, 0.6))',
-          scale: 1.05,
-          duration: 0.5,
-          ease: 'power2.out',
-        });
-      }
-    });
-
-    // ── Mouse move: parallax shift ──
-    card.addEventListener('mousemove', (e: MouseEvent) => {
-      const rect = card.getBoundingClientRect();
-      const x = (e.clientX - rect.left) / rect.width - 0.5;
-      const y = (e.clientY - rect.top) / rect.height - 0.5;
-
+      // The melt: the frosted pane thins and the logo emerges through it.
       gsap.to(glass, {
-        x: -x * maxShift * 2,
-        y: -y * maxShift * 2,
-        duration: 0.4,
+        opacity: GLASS_OPEN_OPACITY,
+        duration: OPEN_FADE_DURATION,
         ease: 'power2.out',
-      });
-    });
-
-    // ── Mouse leave: Iris closes ──
-    card.addEventListener('mouseleave', () => {
-      gsap.killTweensOf(state);
-      gsap.to(state, {
-        maskSize: MASK_CLOSED,
-        duration: 0.5,
-        ease: 'power2.inOut',
-        onUpdate: () => applyMask(glass, state.maskSize),
+        overwrite: 'auto',
       });
 
-      // Glass returns to full opacity
-      gsap.to(glass, {
-        x: 0, y: 0, opacity: 1,
-        duration: 0.5,
-        ease: 'elastic.out(1, 0.5)',
-      });
-
-      // Logo glow resets
       if (logoImg) {
         gsap.to(logoImg, {
-          filter: 'drop-shadow(0 0 12px hsla(155, 70%, 50%, 0.3))',
-          scale: 1,
-          duration: 0.4,
+          filter: GLOW_HOVER,
+          scale: 1.05,
+          duration: OPEN_GLOW_DURATION,
           ease: 'power2.out',
+          overwrite: 'auto',
         });
       }
-    });
-  });
-}
+    };
 
-/** Apply radial mask with given circle size */
-function applyMask(el: HTMLElement, size: number): void {
-  const mask = `radial-gradient(circle ${size}% at 50% 35%, transparent 94%, hsla(155,65%,50%,0.12) 96%, black 100%)`;
-  el.style.maskImage = mask;
-  el.style.webkitMaskImage = mask;
+    const close = () => {
+      card.classList.remove('is-open');
+
+      // The signature elastic "boing" on release — same ease as the original.
+      // Under reduced motion duration is 0, so this simply snaps.
+      gsap.to(glass, {
+        x: 0,
+        y: 0,
+        opacity: 1,
+        duration: CLOSE_RELEASE_DURATION,
+        ease: 'elastic.out(1, 0.5)',
+        overwrite: 'auto',
+        onComplete: () => {
+          glass.style.willChange = 'auto';
+        },
+      });
+
+      if (logoImg) {
+        gsap.to(logoImg, {
+          filter: GLOW_REST,
+          scale: 1,
+          duration: CLOSE_GLOW_DURATION,
+          ease: 'power2.out',
+          overwrite: 'auto',
+        });
+      }
+    };
+
+    if (supportsHover) {
+      // quickTo reuses ONE tween per axis across every mousemove instead of
+      // allocating a new gsap.to() per event — mousemove fires far more often
+      // than anything else here (gsap-performance skill pattern).
+      const xTo = gsap.quickTo(glass, 'x', { duration: 0.4, ease: 'power2.out' });
+      const yTo = gsap.quickTo(glass, 'y', { duration: 0.4, ease: 'power2.out' });
+
+      card.addEventListener('mouseenter', open);
+
+      card.addEventListener('mousemove', (e: MouseEvent) => {
+        if (prefersReducedMotion) return; // parallax is pure motion — gate it
+        const rect = card.getBoundingClientRect();
+        const nx = (e.clientX - rect.left) / rect.width - 0.5;
+        const ny = (e.clientY - rect.top) / rect.height - 0.5;
+        xTo(-nx * PARALLAX_MAX * 2);
+        yTo(-ny * PARALLAX_MAX * 2);
+      });
+
+      card.addEventListener('mouseleave', close);
+    } else {
+      // Touch/coarse pointers: mouseenter/leave are unreliable (mobile Safari
+      // fires a synthetic hover on tap with no matching leave — a stuck card).
+      // Explicit tap-to-open/tap-to-close with the SAME open()/close(), so
+      // touch users get the full effect on their own terms.
+      card.addEventListener('click', () => {
+        const reopening = activeTapClose !== close;
+        if (activeTapClose) activeTapClose();
+        if (reopening) {
+          open();
+          activeTapClose = close;
+        } else {
+          activeTapClose = null;
+        }
+      });
+    }
+  });
 }
 
 /** Draw neural connection lines between card centers */
@@ -455,19 +516,35 @@ function drawNeuralLines(section: HTMLElement): void {
     });
   });
 
-  // Connect adjacent cards (horizontal + vertical neighbors in 4-column grid)
-  const cols = getComputedStyle(section.querySelector('.stack__grid')!)
-    .gridTemplateColumns.split(' ').length;
+  // Connect adjacent cards by their ACTUAL rendered positions. The grid is a
+  // flex-wrap layout (centred last row), so `gridTemplateColumns` computes to
+  // "none" here — the old code read it anyway, got cols=1, and silently drew a
+  // degenerate chain: zero horizontal lines, "below" meaning "next in DOM".
+  // Row membership is detected from the y coordinate instead; works for any
+  // wrap count (6+5 desktop, 4+4+3 tablet, 2-per-row mobile) automatically.
+  const rowTol = 10; // px — cards whose centers differ less than this share a row
 
   for (let i = 0; i < centers.length; i++) {
-    // Right neighbor
-    if ((i + 1) % cols !== 0 && i + 1 < centers.length) {
-      addLine(svg, centers[i], centers[i + 1], i * 0.15);
+    const c = centers[i]!;
+
+    // Right neighbour: the next card, only if it sits on the same visual row.
+    const next = centers[i + 1];
+    if (next && Math.abs(next.y - c.y) < rowTol) {
+      addLine(svg, c, next, i * 0.15);
     }
-    // Bottom neighbor
-    if (i + cols < centers.length) {
-      addLine(svg, centers[i], centers[i + cols], i * 0.15 + 0.05);
+
+    // Below neighbour: the horizontally-closest card in the NEXT row only
+    // (centred rows are offset, so nearest-x gives clean, natural diagonals).
+    let below: { x: number; y: number } | undefined;
+    let belowRowY: number | undefined;
+    for (let j = i + 1; j < centers.length; j++) {
+      const cand = centers[j]!;
+      if (cand.y <= c.y + rowTol) continue; // same row
+      if (belowRowY === undefined) belowRowY = cand.y;
+      if (cand.y > belowRowY + rowTol) break; // past the next row
+      if (!below || Math.abs(cand.x - c.x) < Math.abs(below.x - c.x)) below = cand;
     }
+    if (below) addLine(svg, c, below, i * 0.15 + 0.05);
   }
 
   // Trigger visibility after a beat

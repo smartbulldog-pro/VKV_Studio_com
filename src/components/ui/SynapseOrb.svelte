@@ -29,6 +29,7 @@
    *  • $effect() — side-effects with cleanup (replaces onMount/onDestroy)
    */
 
+  import { untrack } from 'svelte';
   import { createOrbRenderer } from '@/lib/synapse-orb-renderer';
   import type { OrbRenderer, OrbState } from '@/lib/synapse-orb-renderer';
 
@@ -49,16 +50,16 @@
   }
 
   const {
-    orbState       = 'idle',
+    orbState = 'idle',
     audioAmplitude = 0,
-    size           = 200,
+    size = 200,
     class: className = '',
   }: Props = $props();
 
   // ─── DOM refs ───────────────────────────────────────────────────────────────
 
   let wrapperEl: HTMLDivElement | undefined = $state();
-  let canvasEl:  HTMLCanvasElement | undefined = $state();
+  let canvasEl: HTMLCanvasElement | undefined = $state();
 
   // ─── Renderer instance (lives for the component lifetime) ───────────────────
 
@@ -68,16 +69,32 @@
 
   $effect(() => {
     if (!canvasEl || !wrapperEl) return;
+    const wrapper = wrapperEl;
 
     // Initialise renderer — sets up RAF loop internally
-    renderer = createOrbRenderer(canvasEl);
+    const r = createOrbRenderer(canvasEl);
+    renderer = r;
 
-    // Apply initial logical size immediately
-    renderer.resize(size);
+    /* The initial push is UNTRACKED, and that is the whole point of this
+       block. An $effect subscribes to every reactive value it reads, and its
+       cleanup runs before each re-run — so reading `audioAmplitude` here made
+       this the mount effect AND an amplitude watcher. `audioAmplitude` is
+       driven by an AudioContext AnalyserNode, i.e. it changes every animation
+       frame while Synapse is speaking. The orb was therefore destroying its
+       renderer, tearing down the RAF loop and the ResizeObserver, and building
+       all three again, sixty times a second, for the entire length of every
+       spoken reply — on the one element the whole landing page is built
+       around. `orbState` and `size` had the same problem, more slowly.
 
-    // Set initial state
-    renderer.setState(orbState);
-    renderer.setAmplitude(audioAmplitude);
+       The dedicated bridge effects below already push all three whenever they
+       change; that is what they are for. This one only has to seed the
+       renderer before the first paint, so it reads the current values without
+       subscribing to them. */
+    untrack(() => {
+      r.resize(size);
+      r.setState(orbState);
+      r.setAmplitude(audioAmplitude);
+    });
 
     // ResizeObserver: propagate logical size changes to the canvas
     // (fired when the `size` prop changes via CSS container or parent resize)
@@ -87,7 +104,7 @@
       const logical = entry.contentRect.width;
       if (logical > 0) renderer.resize(logical);
     });
-    ro.observe(wrapperEl);
+    ro.observe(wrapper);
 
     // Cleanup — called when component unmounts or $effect re-runs
     return () => {
@@ -149,11 +166,7 @@
     - CSS width/height are also set by resize() to `size` px.
     - aria-hidden: the orb is decorative — no meaningful text content.
   -->
-  <canvas
-    bind:this={canvasEl}
-    class="synapse-orb-canvas"
-    aria-hidden="true"
-  ></canvas>
+  <canvas bind:this={canvasEl} class="synapse-orb-canvas" aria-hidden="true"></canvas>
 
   <!--
     Reduced-motion fallback: a simple static glow ring.
@@ -183,7 +196,7 @@
     box-shadow: 0 0 32px var(--orb-glow-color, hsla(185, 80%, 60%, 0.08));
     transition:
       border-color 600ms cubic-bezier(0.16, 1, 0.3, 1),
-      box-shadow   600ms cubic-bezier(0.16, 1, 0.3, 1);
+      box-shadow 600ms cubic-bezier(0.16, 1, 0.3, 1);
 
     /*
      * will-change: allow compositor to promote the layer ahead of animations.
@@ -194,24 +207,24 @@
 
   /* ── State-driven CSS custom properties ──────────────────────────── */
 
-  .synapse-orb-wrapper[data-state="idle"] {
+  .synapse-orb-wrapper[data-state='idle'] {
     --orb-border-color: hsla(185, 80%, 60%, 0.15);
-    --orb-glow-color:   hsla(185, 80%, 60%, 0.06);
+    --orb-glow-color: hsla(185, 80%, 60%, 0.06);
   }
 
-  .synapse-orb-wrapper[data-state="listening"] {
-    --orb-border-color: hsla(155, 60%, 50%, 0.30);
-    --orb-glow-color:   hsla(155, 60%, 50%, 0.12);
+  .synapse-orb-wrapper[data-state='listening'] {
+    --orb-border-color: hsla(155, 60%, 50%, 0.3);
+    --orb-glow-color: hsla(155, 60%, 50%, 0.12);
   }
 
-  .synapse-orb-wrapper[data-state="thinking"] {
+  .synapse-orb-wrapper[data-state='thinking'] {
     --orb-border-color: hsla(195, 20%, 85%, 0.25);
-    --orb-glow-color:   hsla(195, 20%, 85%, 0.10);
+    --orb-glow-color: hsla(195, 20%, 85%, 0.1);
   }
 
-  .synapse-orb-wrapper[data-state="speaking"] {
-    --orb-border-color: hsla(185, 80%, 60%, 0.40);
-    --orb-glow-color:   hsla(185, 80%, 60%, 0.18);
+  .synapse-orb-wrapper[data-state='speaking'] {
+    --orb-border-color: hsla(185, 80%, 60%, 0.4);
+    --orb-glow-color: hsla(185, 80%, 60%, 0.18);
   }
 
   /* ── Canvas ───────────────────────────────────────────────────────── */
@@ -234,7 +247,7 @@
     border-radius: 50%;
     background: radial-gradient(
       circle,
-      hsla(185, 80%, 60%, 0.20) 0%,
+      hsla(185, 80%, 60%, 0.2) 0%,
       hsla(185, 80%, 60%, 0.06) 50%,
       transparent 100%
     );

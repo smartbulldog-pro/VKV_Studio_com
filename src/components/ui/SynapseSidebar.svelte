@@ -67,6 +67,8 @@
   /** The delete-trigger button that opened the confirm dialog — focus returns
       here on cancel/Escape (it survives), or falls back to New Chat on delete. */
   let deleteTriggerEl: HTMLElement | undefined = $state();
+  /** The rename-trigger button — focus returns here when the inline rename ends. */
+  let renameTriggerEl: HTMLElement | undefined = $state();
   /** Ref to the New Chat button — the safe focus target after a row is deleted. */
   let newChatBtnEl: HTMLElement | undefined = $state();
 
@@ -99,9 +101,20 @@
 
   // ─── Rename helpers ───────────────────────────────────────────────────────────
 
-  function startRename(conv: Conversation): void {
+  function startRename(conv: Conversation, trigger?: HTMLElement): void {
+    renameTriggerEl = trigger;
     renamingId = conv.id;
     renameValue = conv.title;
+  }
+
+  /** Return focus to the rename button (it survives) so a keyboard user isn't
+      dropped to <body> when the inline input unmounts; New Chat as a fallback. */
+  function restoreRenameFocus(): void {
+    const trigger = renameTriggerEl;
+    requestAnimationFrame(() => {
+      if (trigger && document.contains(trigger)) trigger.focus();
+      else newChatBtnEl?.focus();
+    });
   }
 
   function commitRename(id: string): void {
@@ -110,6 +123,7 @@
       onRename(id, trimmed);
     }
     renamingId = '';
+    restoreRenameFocus();
   }
 
   function handleRenameKeydown(e: KeyboardEvent, id: string): void {
@@ -118,7 +132,13 @@
       commitRename(id);
     }
     if (e.key === 'Escape') {
+      e.preventDefault();
+      // Cancel means DISCARD. The input unmounts when renamingId clears and fires a
+      // native blur → commitRename; reset the draft to the stored title first so
+      // that commit sees no change and skips onRename. Without this, Escape SAVED.
+      renameValue = conversations.find((c) => c.id === id)?.title ?? renameValue;
       renamingId = '';
+      restoreRenameFocus();
     }
   }
 
@@ -346,7 +366,7 @@
                 class="conv-action-btn conv-rename-btn"
                 onclick={(e) => {
                   e.stopPropagation();
-                  startRename(conv);
+                  startRename(conv, e.currentTarget as HTMLElement);
                 }}
                 aria-label={t(uiLang, 'synapse.sidebar.rename')}
                 title={t(uiLang, 'synapse.sidebar.rename')}
@@ -686,6 +706,15 @@
     color: #00ffd5;
     outline: none;
     caret-color: #00ffd5;
+  }
+
+  /* This input is autofocused on open with outline:none and no :focus rule, so it
+     had zero visible focus indicator. Give keyboard/AT users a ring in the
+     sidebar's own teal. */
+  .conv-rename-input:focus-visible {
+    outline: 2px solid hsl(175, 80%, 50%);
+    outline-offset: 1px;
+    border-color: hsl(175, 80%, 50%);
   }
 
   /* Action buttons container — appears on hover */

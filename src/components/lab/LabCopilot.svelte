@@ -761,6 +761,10 @@
   .copilot__input:focus {
     border-color: var(--accent-green-400);
   }
+  .copilot__input:focus-visible {
+    outline: 2px solid var(--accent-green-400);
+    outline-offset: 2px;
+  }
   .copilot__send {
     padding: var(--space-2) var(--space-4);
     border: none;

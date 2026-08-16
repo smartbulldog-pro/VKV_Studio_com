@@ -20,13 +20,15 @@ interface PolicySection {
 
 interface PolicyContent {
   updated: string;
+  updatedISO: string;
   intro: string;
   sections: PolicySection[];
 }
 
 const content: Record<Lang, PolicyContent> = {
   en: {
-    updated: 'Last updated: 14 August 2026',
+    updated: 'Last updated: 15 August 2026',
+    updatedISO: '2026-08-15',
     intro:
       "This policy covers vkvstudio.com and every page and browser-based tool hosted on it — the marketing site, the Lab (Tokenizer Profiler, Prompt Architect, Embedding Space Explorer), and the Synapse AI assistant. It's written to describe exactly what the code on this site does today, not what a generic privacy-policy template assumes a website does. Where a feature isn't live in the current deployment, that's stated explicitly below.",
     sections: [
@@ -56,7 +58,7 @@ const content: Record<Lang, PolicyContent> = {
         paragraphs: [
           'The Tokenizer Profiler and Prompt Architect run entirely in your browser in JavaScript. Text you type into them is tokenized or otherwise processed locally on your device and is never uploaded anywhere by default. (The Tokenizer\'s exact-count mode for a few models is the one exception — it sends that text to the inference backend, which relays it to the model provider\'s token-counting API; see "Third-party processors" below.)',
           "The Embedding Space Explorer computes its vectors on the inference backend, not in your browser: the passages and search queries you embed are sent to the backend (running Google's EmbeddingGemma) and turned into vectors there. Like Synapse, this backend isn't part of the default static deployment — if it isn't running, the Explorer doesn't work. The text is embedded on the fly and is not stored by the embedding endpoint.",
-          'If you use Synapse, the AI assistant, your conversation history is also cached locally in your browser using IndexedDB, so it persists across visits on the same device and browser.',
+          'If you use Synapse, the AI assistant, your conversation history is also cached locally in your browser using IndexedDB. How long it lasts depends on whether you sign in: signed out, it is erased when you close the browser, so nothing you typed is left behind for the next person at that machine. Sign in and it is kept, and also copied to the server (below) so it follows you to another device.',
         ],
       },
       {
@@ -65,9 +67,9 @@ const content: Record<Lang, PolicyContent> = {
         paragraphs: ['A few features can, under specific conditions, send text off your device:'],
         list: [
           "Embedding Space Explorer — the passages and search queries you embed are sent to VKVstudio's own inference backend and turned into vectors by Google's EmbeddingGemma running there. They're embedded on the fly and are not stored by the embedding endpoint. Like the other features here, this backend isn't part of the default static deployment; if it isn't running, the Explorer doesn't work.",
-          "Token 'verification' in the Tokenizer Profiler — some proprietary models (Claude, Gemini) don't publish a client-side tokenizer, so an exact count requires an API call. If you opt into 'exact' verification for one of these models, the text you're tokenizing is sent to VKVstudio's own inference backend, which forwards it to Anthropic's or Google's API to get an exact count, then returns just the number. This only happens when that backend is configured and reachable — in the default static deployment of this site it isn't running, and the tool falls back to a local approximation instead.",
-          "Synapse conversations, server-side — server-side storage only happens if you sign in with Google. When you do, your history is stored twice: once locally (above) and once in a server-side database, keyed to your Google account's unique id — not your name, email, or IP address. If you don't sign in, your conversations never leave your browser and nothing is sent to the server. As with the rest of Synapse, this needs the backend running, which isn't part of the default static deployment.",
-          "Synapse voice input — if you speak to Synapse (the mic button), your recorded audio is sent to VKVstudio's own inference backend. Transcription is not working in the current deployment: Synapse can speak but cannot yet listen, so audio arriving at the backend is not turned into text and is not retained. The backend can be configured to transcribe either with a self-hosted model or with Google Cloud Speech-to-Text; the Google path is not switched on, and this policy will be updated before it is.",
+          "Exact token counts in the Tokenizer Profiler — some proprietary models (Claude, Gemini) publish no client-side tokenizer, so an exact count needs an API call. Selecting one of those models is what starts it: from then on the text in the box is sent, as you type, to VKVstudio's own inference backend, which forwards it to Google's or Anthropic's API and returns just the number. There is no separate switch to agree to — the model you pick is the choice. Every other model in the list is counted entirely in your browser and nothing is sent anywhere. If the backend is unreachable, the tool falls back to a local approximation and labels the number as approximate rather than exact.",
+          "Synapse conversations — your message is sent to VKVstudio's own inference backend and answered by the self-hosted model running there, whether or not you are signed in. That is simply where the model lives; it is not in your browser. What signing in changes is storage: signed in, the conversation is also written to a server-side database keyed to your Google account's unique id — not your name, email, or IP address. Signed out, nothing about the conversation is written to that database and the transcript exists only in your browser. In both cases the server writes an operational log line per request that includes the first 80 characters of the assistant's reply.",
+          "Synapse voice input — if you use the mic button, your browser records audio and sends it to VKVstudio's own inference backend, which forwards it to Google Cloud Speech-to-Text for transcription. Google receives the audio of what you said; the transcript then goes to the assistant as if you had typed it. The recording is not stored: it is held in memory for the length of the request and discarded. The transcript itself is treated exactly like a typed message — see the Synapse conversations entry above. Nothing is recorded until you press the button, and the browser asks your permission first. This control was switched off between 13 and 15 August 2026, when transcription did not work; it was restored once it did.",
           "Synapse spoken replies — when Synapse answers out loud, the text of its reply is sent from VKVstudio's backend to Google Cloud Text-to-Speech (Chirp 3 HD), which returns the audio. Google receives the assistant's words, which reflect what you asked it; it does not receive your microphone audio, your account, or anything else identifying you. Unlike the optional features above, this is on by default whenever the backend is running and a reply is spoken.",
         ],
       },
@@ -95,7 +97,7 @@ const content: Record<Lang, PolicyContent> = {
         paragraphs: [],
         list: [
           "Notice-dismissal flag (localStorage) — persists until you clear your browser's local storage for this site.",
-          'Local IndexedDB conversation history (Synapse) — stays on your device until you clear your browser storage or delete conversations in the app.',
+          'Local IndexedDB conversation history (Synapse) — if you are signed in, it stays on your device until you clear your browser storage or delete conversations in the app. If you are not signed in, it is erased when you close the browser.',
           'Server-side conversation history (Synapse, only if you sign in with Google) — retained until you delete the conversation, or automatically purged 30 days after it was last updated, whichever comes first.',
           "Cloudflare request logs — retained per Cloudflare's own standard log-retention policy, outside our control; see Cloudflare's own privacy documentation.",
         ],
@@ -149,7 +151,7 @@ const content: Record<Lang, PolicyContent> = {
         title: 'Data controller & contact',
         paragraphs: [],
         list: [
-          'Data controller: VKVstudio — Karpov Valeriy Ivanovich, sole proprietorship (individual entrepreneur, Ա/Ձ).',
+          'Data controller: VKVstudio — Karpov Valerii, sole proprietorship (individual entrepreneur, Ա/Ձ).',
           'Registered with the State Register of Legal Entities, Ministry of Justice of the Republic of Armenia, on 12 February 2026.',
           'Registered activity: 62.01.0 — computer programming',
           'Place of registration: Gyumri, Shirak Province, Republic of Armenia',
@@ -159,7 +161,8 @@ const content: Record<Lang, PolicyContent> = {
     ],
   },
   ru: {
-    updated: 'Обновлено: 14 августа 2026',
+    updated: 'Обновлено: 15 августа 2026',
+    updatedISO: '2026-08-15',
     intro:
       'Эта политика распространяется на весь сайт vkvstudio.com и на все инструменты, работающие в браузере на этом домене: основной сайт, раздел «Лаборатория» (Профайлер токенизации, Prompt Architect, Пространство эмбеддингов) и AI-ассистента Synapse. Текст описывает именно то, что делает код сайта сегодня, а не то, что предполагает типовой шаблон политики конфиденциальности. Если какая-то функция ещё не работает в текущей публичной версии сайта, это прямо указано ниже.',
     sections: [
@@ -189,7 +192,7 @@ const content: Record<Lang, PolicyContent> = {
         paragraphs: [
           'Профайлер токенизации и Prompt Architect работают полностью в вашем браузере на JavaScript. Текст, который вы вводите в них, токенизируется или иначе обрабатывается локально на вашем устройстве и по умолчанию никуда не отправляется. (Единственное исключение — режим точного подсчёта токенов для нескольких моделей: он отправляет этот текст на inference-бэкенд, который передаёт его в API подсчёта токенов провайдера модели; см. «Сторонние обработчики» ниже.)',
           'Пространство эмбеддингов считает векторы на inference-бэкенде, а не в браузере: отрывки и поисковые запросы, которые вы эмбеддите, отправляются на бэкенд (там работает Google EmbeddingGemma) и превращаются в векторы на сервере. Как и Synapse, этот бэкенд не входит в стандартный статический деплой — если он не запущен, инструмент не работает. Текст эмбеддится на лету и не сохраняется эндпоинтом эмбеддингов.',
-          'Если вы пользуетесь Synapse, AI-ассистентом, история вашей переписки также кэшируется локально в браузере через IndexedDB, поэтому она сохраняется между визитами на одном и том же устройстве и в одном браузере.',
+          'Если вы пользуетесь Synapse, AI-ассистентом, история вашей переписки также кэшируется локально в браузере через IndexedDB. Сколько она живёт, зависит от того, вошли вы или нет: без входа она удаляется, когда вы закрываете браузер, поэтому написанное вами не остаётся следующему человеку за этим компьютером. Если вы вошли — она сохраняется и копируется на сервер (см. ниже), поэтому доступна и с другого устройства.',
         ],
       },
       {
@@ -200,9 +203,9 @@ const content: Record<Lang, PolicyContent> = {
         ],
         list: [
           'Пространство эмбеддингов — отрывки и поисковые запросы, которые вы эмбеддите, отправляются на собственный inference-бэкенд VKVstudio и превращаются в векторы моделью Google EmbeddingGemma, работающей там. Они эмбеддятся на лету и не сохраняются эндпоинтом эмбеддингов. Как и другие функции здесь, этот бэкенд не входит в стандартную статическую версию сайта; если он не запущен, инструмент не работает.',
-          'Проверка токенов в Профайлере токенизации — для некоторых проприетарных моделей (Claude, Gemini) не публикуется клиентский токенизатор, поэтому точный подсчёт требует обращения к API. Если вы включаете «точную» проверку для одной из этих моделей, текст, который вы токенизируете, отправляется на собственный inference-бэкенд VKVstudio, который пересылает его в API Anthropic или Google, чтобы получить точное число токенов, а затем возвращает только это число. Это происходит, только если бэкенд настроен и доступен — в стандартной статической версии сайта он не запущен, и инструмент вместо этого использует локальное приближение.',
-          'Переписка с Synapse на сервере — серверное хранение происходит, только если вы вошли через Google. Тогда история вашей переписки хранится дважды: один раз локально (см. выше) и один раз в серверной базе данных, привязанная к уникальному идентификатору вашего аккаунта Google — не к имени, email или IP-адресу. Если вы не входите, ваша переписка никогда не покидает браузер и на сервер ничего не отправляется. Как и остальной Synapse, это требует запущенного бэкенда, который не входит в стандартную статическую версию сайта.',
-          'Голосовой ввод Synapse — если вы говорите с Synapse (кнопка микрофона), записанное аудио отправляется на собственный inference-бэкенд VKVstudio. В текущей версии распознавание не работает: Synapse умеет говорить, но пока не умеет слушать, поэтому дошедшее до бэкенда аудио не превращается в текст и не сохраняется. Бэкенд можно настроить на распознавание либо self-hosted моделью, либо через Google Cloud Speech-to-Text; путь через Google не включён, и эта политика будет обновлена прежде, чем он будет включён.',
+          'Точный подсчёт токенов в Профайлере токенизации — для некоторых проприетарных моделей (Claude, Gemini) клиентский токенизатор не публикуется, поэтому точное число требует обращения к API. Запускает это сам выбор такой модели: с этого момента текст из поля отправляется по мере набора на собственный inference-бэкенд VKVstudio, тот пересылает его в API Google или Anthropic и возвращает только число. Отдельного переключателя, который надо включить, нет — выбор модели и есть согласие. Все остальные модели в списке считаются целиком в вашем браузере, и никуда ничего не уходит. Если бэкенд недоступен, инструмент переходит на локальное приближение и помечает число как приблизительное, а не точное.',
+          'Переписка с Synapse — ваше сообщение отправляется на собственный inference-бэкенд VKVstudio и обрабатывается работающей там self-hosted моделью, независимо от того, вошли вы или нет. Просто модель живёт там, а не в вашем браузере. Вход меняет хранение: если вы вошли, переписка дополнительно записывается в серверную базу, привязанную к уникальному идентификатору вашего аккаунта Google — не к имени, email или IP-адресу. Если не вошли, в эту базу о переписке не записывается ничего, и она существует только в вашем браузере. В обоих случаях сервер пишет служебную строку лога на каждый запрос, включающую первые 80 символов ответа ассистента.',
+          'Голосовой ввод Synapse — если вы пользуетесь кнопкой микрофона, браузер записывает звук и отправляет его на собственный inference-бэкенд VKVstudio, а тот пересылает запись в Google Cloud Speech-to-Text для распознавания. Google получает аудио того, что вы сказали; затем расшифровка уходит ассистенту так, как будто вы её набрали. Сама запись не сохраняется: она живёт в памяти на время запроса и удаляется. С расшифровкой дальше обращаются точно так же, как с набранным сообщением — см. пункт про переписку с Synapse выше. Ничего не записывается, пока вы не нажали кнопку, и браузер сначала спросит разрешение. Эта кнопка была выключена с 13 по 15 августа 2026 года, пока распознавание не работало, и вернулась, когда заработало.',
           'Озвучка ответов Synapse — когда Synapse отвечает вслух, текст его ответа отправляется с бэкенда VKVstudio в Google Cloud Text-to-Speech (Chirp 3 HD), который возвращает аудио. Google получает слова ассистента, которые отражают то, о чём вы спросили; он не получает ни звук с вашего микрофона, ни ваш аккаунт, ни что-либо ещё, идентифицирующее вас. В отличие от перечисленных выше необязательных функций, это работает по умолчанию всегда, когда бэкенд запущен и ответ озвучивается.',
         ],
       },
@@ -230,7 +233,7 @@ const content: Record<Lang, PolicyContent> = {
         paragraphs: [],
         list: [
           'Флаг о закрытии уведомления (localStorage) — хранится до тех пор, пока вы не очистите локальное хранилище браузера для этого сайта.',
-          'Локальная история переписки Synapse в IndexedDB — остаётся на вашем устройстве, пока вы не очистите хранилище браузера или не удалите переписку в самом приложении.',
+          'Локальная история переписки Synapse в IndexedDB — если вы вошли, остаётся на вашем устройстве, пока вы не очистите хранилище браузера или не удалите переписку в самом приложении. Если вы не вошли, она удаляется при закрытии браузера.',
           'Серверная история переписки Synapse (только если вы вошли через Google) — хранится до тех пор, пока вы не удалите переписку, либо автоматически удаляется через 30 дней после последнего изменения, в зависимости от того, что наступит раньше.',
           'Логи запросов Cloudflare — хранятся согласно собственной политике хранения логов Cloudflare, вне нашего контроля; подробнее — в документации Cloudflare о конфиденциальности.',
         ],
@@ -284,7 +287,7 @@ const content: Record<Lang, PolicyContent> = {
         title: 'Оператор данных и контакты',
         paragraphs: [],
         list: [
-          'Контролёр данных: VKVstudio — Карпов Валерий Иванович, индивидуальный предприниматель (Ա/Ձ).',
+          'Контролёр данных: VKVstudio — Карпов Валерий, индивидуальный предприниматель (Ա/Ձ).',
           'Зарегистрирован в Государственном регистре юридических лиц Министерства юстиции Республики Армения 12 февраля 2026 года.',
           'Зарегистрированный вид деятельности: 62.01.0 — разработка программного обеспечения',
           'Место регистрации: Гюмри, Ширакская область, Республика Армения',
@@ -320,7 +323,7 @@ const jsonLd = [
       <div class="container container--narrow">
         <a href={`/${activeLang}/`} class="back-link">← {t(activeLang, 'nav.home')}</a>
         <h1 class="text-h1 text-gradient">{t(activeLang, 'privacy.h1')}</h1>
-        <p class="privacy-updated text-mono">{page.updated}</p>
+        <p class="privacy-updated text-mono"><time datetime={page.updatedISO}>{page.updated}</time></p>
         <p class="text-secondary privacy-intro">{page.intro}</p>
       </div>
     </header>
@@ -329,7 +332,7 @@ const jsonLd = [
       <div class="container container--narrow">
         {
           page.sections.map((section) => (
-            <article class="privacy-section" id={section.id}>
+            <section class="privacy-section" id={section.id}>
               <h2>{section.title}</h2>
               {section.paragraphs.map((paragraph) => (
                 <p>{paragraph}</p>
@@ -341,7 +344,7 @@ const jsonLd = [
                   ))}
                 </ul>
               )}
-            </article>
+            </section>
           ))
         }
       </div>

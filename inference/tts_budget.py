@@ -37,24 +37,40 @@ class TTSBudget:
         path: str | Path,
         monthly_cap: int,
         clock: Callable[[], datetime] | None = None,
+        *,
+        label: str = "TTS monthly char",
+        period_fmt: str = "%Y-%m",
     ) -> None:
         self._path = Path(path)
         self._cap = int(monthly_cap)
         self._clock = clock or (lambda: datetime.now(timezone.utc))
         self._lock = threading.Lock()
         self._alerted_80 = False
+        # `label` only names the budget in log lines; `period_fmt` chooses how
+        # often it resets. Both exist so this class can guard the token-counting
+        # relay as well as Chirp, without a second copy of the same careful
+        # atomic-reserve logic. A DAILY period is the right choice there: the
+        # threat is a stranger burning the API key's quota, and a monthly cap
+        # would turn one bad afternoon into a month with the feature switched
+        # off — trading someone else's abuse for our own outage.
+        self._label = label
+        self._period_fmt = period_fmt
 
     # ── internal ─────────────────────────────────────────────────────────────
     def _month_key(self) -> str:
-        return self._clock().strftime("%Y-%m")
+        return self._clock().strftime(self._period_fmt)
 
     def _load(self) -> dict:
-        """Read the counter, auto-resetting if the stored month != current month."""
+        """Read the counter, auto-resetting if the stored period != current one."""
         try:
             data = json.loads(self._path.read_text(encoding="utf-8"))
         except (FileNotFoundError, ValueError, OSError):
             data = {}
         month = self._month_key()
+        # NOTE: the JSON keys stay "month"/"chars" whatever the period or unit
+        # is. They are the on-disk names of an existing live counter file; a
+        # rename would make the running TTS budget unreadable, which reads as
+        # zero used and silently hands out a fresh month of Google characters.
         if not isinstance(data, dict) or data.get("month") != month:
             return {"month": month, "chars": 0}
         try:
@@ -72,7 +88,7 @@ class TTSBudget:
             os.replace(tmp, self._path)
         except OSError as e:
             # Persistence failure must never break synthesis — just log it.
-            logger.warning("TTS budget persist failed: %s", e)
+            logger.warning("%s budget persist failed: %s", self._label, e)
 
     # ── public API ───────────────────────────────────────────────────────────
     @property
@@ -143,6 +159,6 @@ class TTSBudget:
         if self._cap > 0 and not self._alerted_80 and used >= 0.8 * self._cap:
             self._alerted_80 = True
             logger.warning(
-                "TTS monthly char budget at %d/%d (>=80%%) — approaching free-tier limit",
-                used, self._cap,
+                "%s budget at %d/%d (>=80%%) — approaching the cap",
+                self._label, used, self._cap,
             )

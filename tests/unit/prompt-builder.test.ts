@@ -12,6 +12,10 @@ import {
   type ModelConfig,
   evaluateCacheEligibility,
   calculateCachedCost,
+  calculateCost,
+  calculateOutputCost,
+  pricesFor,
+  MODELS,
   chatWrappingOverhead,
   exportAsAnthropicMessages,
   anthropicExportRoleOrderWarning,
@@ -68,7 +72,7 @@ describe('evaluateCacheEligibility — cache floor', () => {
     const result = evaluateCacheEligibility(blocks, model);
     expect(result.eligibleCacheableTokens).toBe(2000);
     expect(result.belowFloorTokens).toBe(500);
-    expect(result.belowFloorBlockIds).toEqual([blocks[1].id]);
+    expect(result.belowFloorBlockIds).toEqual([blocks[1]!.id]);
     expect(result.eligibleBlockCount).toBe(1);
   });
 
@@ -89,7 +93,7 @@ describe('evaluateCacheEligibility — cache floor', () => {
     expect(result.eligibleBlockCount).toBe(0);
   });
 
-  it('flags exceedsBreakpointLimit only past Anthropic\'s 4-breakpoint limit, and only for anthropic', () => {
+  it("flags exceedsBreakpointLimit only past Anthropic's 4-breakpoint limit, and only for anthropic", () => {
     const anthropic = makeModel({ provider: 'anthropic', minCacheTokens: 100 });
     const fourEligible = Array.from({ length: 4 }, () =>
       makeBlock({ role: 'context', cacheable: true, tokens: 200 })
@@ -148,13 +152,19 @@ describe('calculateCachedCost — batch discount', () => {
   it('stacks multiplicatively with the cache discount, not additively', () => {
     // write = cacheableTokens/1e6 * inputPrice * cacheWriteMultiplier
     // read  = cacheableTokens/1e6 * inputPrice * cacheReadMultiplier
-    const model = makeModel({ inputPrice: 2.0, cacheWriteMultiplier: 1.25, cacheReadMultiplier: 0.1 });
+    const model = makeModel({
+      inputPrice: 2.0,
+      cacheWriteMultiplier: 1.25,
+      cacheReadMultiplier: 0.1,
+    });
     const cacheableTokens = 10_000;
     const freshTokens = 0;
     const outputTokens = 0;
     const result = calculateCachedCost(cacheableTokens, freshTokens, outputTokens, model, 0.5);
-    const expectedWrite = (cacheableTokens / 1_000_000) * model.inputPrice * model.cacheWriteMultiplier;
-    const expectedRead = (cacheableTokens / 1_000_000) * model.inputPrice * model.cacheReadMultiplier;
+    const expectedWrite =
+      (cacheableTokens / 1_000_000) * model.inputPrice * model.cacheWriteMultiplier;
+    const expectedRead =
+      (cacheableTokens / 1_000_000) * model.inputPrice * model.cacheReadMultiplier;
     expect(result.firstCall).toBeCloseTo(expectedWrite * 0.5, 10);
     expect(result.cachedCall).toBeCloseTo(expectedRead * 0.5, 10);
   });
@@ -212,7 +222,10 @@ describe('exportAsAnthropicMessages', () => {
     expect(parsed.messages[0].content[0].text).toContain('[CONTEXT]');
     expect(parsed.messages[0].content[0].text).toContain('retrieved docs here');
     expect(parsed.messages[0].content[1].text).toBe('question');
-    expect(parsed.messages[1]).toEqual({ role: 'assistant', content: [{ type: 'text', text: 'answer' }] });
+    expect(parsed.messages[1]).toEqual({
+      role: 'assistant',
+      content: [{ type: 'text', text: 'answer' }],
+    });
   });
 
   it('passes through valid JSON tools content as a top-level tools array', () => {
@@ -263,14 +276,14 @@ describe('exportAsAnthropicMessages', () => {
       expect('cache_control' in parsed.system[0]).toBe(false);
     });
 
-    it('a cacheable block below minCacheTokens gets no marker — matches evaluateCacheEligibility\'s floor', () => {
+    it("a cacheable block below minCacheTokens gets no marker — matches evaluateCacheEligibility's floor", () => {
       const model = makeModel({ minCacheTokens: 1024 });
       const blocks = [makeBlock({ role: 'system', content: 'small', cacheable: true, tokens: 5 })];
       const parsed = JSON.parse(exportAsAnthropicMessages(blocks, model));
       expect('cache_control' in parsed.system[0]).toBe(false);
     });
 
-    it('marks a cacheable user/assistant block\'s own content segment', () => {
+    it("marks a cacheable user/assistant block's own content segment", () => {
       const model = makeModel({ minCacheTokens: 0 });
       const blocks = [
         makeBlock({ role: 'user', content: 'few-shot example', cacheable: true, tokens: 10 }),
@@ -363,7 +376,10 @@ describe('exportAsAnthropicMessages', () => {
       expect(parsed.messages).toHaveLength(2);
       expect(parsed.messages[0].role).toBe('user');
       expect(parsed.messages[0].content[0].text).toContain('background');
-      expect(parsed.messages[1]).toEqual({ role: 'assistant', content: [{ type: 'text', text: 'hi' }] });
+      expect(parsed.messages[1]).toEqual({
+        role: 'assistant',
+        content: [{ type: 'text', text: 'hi' }],
+      });
     });
   });
 });
@@ -400,13 +416,13 @@ describe('exportAsOpenAIChatCompletions', () => {
 
 describe('exportAsOpenAIResponsesAPI', () => {
   it('uses instructions/input, not system/messages', () => {
-    const model = makeModel({ id: 'gpt-5.5' });
+    const model = makeModel({ id: 'gpt-5.6-sol' });
     const blocks = [
       makeBlock({ role: 'system', content: 'sys prompt' }),
       makeBlock({ role: 'user', content: 'hi' }),
     ];
     const parsed = JSON.parse(exportAsOpenAIResponsesAPI(blocks, model));
-    expect(parsed.model).toBe('gpt-5.5');
+    expect(parsed.model).toBe('gpt-5.6-sol');
     expect(parsed.instructions).toBe('sys prompt');
     expect(parsed.input).toEqual([{ role: 'user', content: 'hi' }]);
     expect('system' in parsed).toBe(false);
@@ -414,7 +430,7 @@ describe('exportAsOpenAIResponsesAPI', () => {
   });
 
   it('shares the same context-merge and tools passthrough behavior as the Anthropic export', () => {
-    const model = makeModel({ id: 'gpt-5.5' });
+    const model = makeModel({ id: 'gpt-5.6-sol' });
     const toolDefs = [{ name: 'search' }];
     const blocks = [
       makeBlock({ role: 'context', content: 'ctx' }),
@@ -437,8 +453,8 @@ describe('chatWrappingOverhead', () => {
   });
 
   it('uses the documented OpenAI ChatML formula for a tiktoken-backed model', () => {
-    // gpt-5.5 is tiktoken-backed in tokenizer/engine.ts.
-    const model = makeModel({ id: 'gpt-5.5', provider: 'openai' });
+    // gpt-5.6-sol is tiktoken-backed in tokenizer/engine.ts.
+    const model = makeModel({ id: 'gpt-5.6-sol', provider: 'openai' });
     const messageCount = 4;
     const result = chatWrappingOverhead(messageCount, model);
     expect(result.exactness).toBe('documented');
@@ -465,5 +481,146 @@ describe('chatWrappingOverhead', () => {
     const model = makeModel({ id: 'not-a-real-model-id' });
     expect(() => chatWrappingOverhead(2, model)).not.toThrow();
     expect(chatWrappingOverhead(2, model).exactness).toBe('estimated');
+  });
+});
+
+// ─── Long-context pricing tiers ──────────────────────────────────────────────
+// These tiers are a SWITCH on the whole request, not a marginal surcharge on
+// the tokens above the line, and they are triggered by the prompt size even
+// for the output price. Both facts were documented in builder.ts as known
+// under-estimates for two months; these tests exist so they cannot quietly
+// become under-estimates again.
+
+describe('long-context pricing tiers', () => {
+  const tiered: ModelConfig = {
+    id: 'tiered',
+    name: 'Tiered',
+    contextWindow: 1_000_000,
+    inputPrice: 2,
+    outputPrice: 12,
+    supportsCaching: true,
+    cacheWriteMultiplier: 1,
+    cacheReadMultiplier: 0.1,
+    provider: 'google',
+    minCacheTokens: 1024,
+    longContext: { thresholdTokens: 200_000, inputPrice: 4, outputPrice: 18 },
+    reasoningCapable: false,
+  };
+  const flat: ModelConfig = { ...tiered, longContext: undefined };
+
+  it('bills the whole prompt at the standard rate at the threshold', () => {
+    // Exactly at the line is still the low tier — Google's table reads "≤200k".
+    expect(calculateCost(200_000, tiered)).toBeCloseTo((200_000 / 1e6) * 2, 10);
+  });
+
+  it('reprices the ENTIRE prompt once past the threshold, not just the excess', () => {
+    // The bug this guards: 200k at $2 plus 1k at $4 would be $0.404.
+    expect(calculateCost(201_000, tiered)).toBeCloseTo((201_000 / 1e6) * 4, 10);
+  });
+
+  it('lets the prompt size decide the OUTPUT price', () => {
+    expect(calculateOutputCost(1_000, tiered, 100_000)).toBeCloseTo((1_000 / 1e6) * 12, 10);
+    expect(calculateOutputCost(1_000, tiered, 300_000)).toBeCloseTo((1_000 / 1e6) * 18, 10);
+  });
+
+  it('defaults to the standard tier when no prompt size is supplied', () => {
+    expect(calculateOutputCost(1_000, tiered)).toBeCloseTo((1_000 / 1e6) * 12, 10);
+  });
+
+  it('counts cached tokens toward the threshold — a cache hit is still a prompt', () => {
+    // 150k cacheable + 100k fresh = 250k of prompt, so the long tier applies
+    // even though neither half would reach it alone.
+    const r = calculateCachedCost(150_000, 100_000, 1_000, tiered);
+    const expectedRead = (150_000 / 1e6) * 4 * 0.1;
+    const expectedFresh = (100_000 / 1e6) * 4;
+    const expectedOut = (1_000 / 1e6) * 18;
+    expect(r.cachedCall).toBeCloseTo(expectedRead + expectedFresh + expectedOut, 10);
+  });
+
+  it('changes nothing for a model without a tier', () => {
+    expect(calculateCost(900_000, flat)).toBeCloseTo((900_000 / 1e6) * 2, 10);
+    expect(calculateOutputCost(1_000, flat, 900_000)).toBeCloseTo((1_000 / 1e6) * 12, 10);
+  });
+
+  it('reports the prices in force via pricesFor', () => {
+    expect(pricesFor(tiered, 10)).toEqual({ inputPrice: 2, outputPrice: 12 });
+    expect(pricesFor(tiered, 999_999)).toEqual({ inputPrice: 4, outputPrice: 18 });
+  });
+});
+
+// ─── The published table itself ──────────────────────────────────────────────
+// Prices are the one thing in this tool a reviewer can check in five seconds
+// against the provider's own page, so the numbers that were found wrong are
+// pinned here with their sources. Update these WITH the table, never to make
+// a failing test pass.
+
+describe('MODELS — figures verified against provider pricing pages 2026-08-15', () => {
+  const byId = (id: string) => {
+    const m = MODELS.find((x) => x.id === id);
+    expect(m, `no model row for ${id}`).toBeDefined();
+    return m!;
+  };
+
+  it('prices Gemini 3.6 and 3.7 Flash at the rate in force, not the 2027 one', () => {
+    // ai.google.dev publishes two columns; the row was reading the wrong one
+    // and charging exactly double.
+    for (const id of ['gemini-3.6-flash', 'gemini-3.7-flash']) {
+      expect(byId(id).inputPrice).toBe(0.75);
+      expect(byId(id).outputPrice).toBe(3.75);
+    }
+  });
+
+  it('keeps Claude Sonnet 5 at $2/$10 — the scheduled increase was cancelled', () => {
+    expect(byId('claude-sonnet-5').inputPrice).toBe(2.0);
+    expect(byId('claude-sonnet-5').outputPrice).toBe(10.0);
+  });
+
+  it('uses Anthropic per-model cache floors, not a per-tier rule of thumb', () => {
+    expect(byId('claude-opus-5').minCacheTokens).toBe(512);
+    expect(byId('claude-fable-5').minCacheTokens).toBe(512);
+    expect(byId('claude-opus-4.8').minCacheTokens).toBe(1024);
+    expect(byId('claude-sonnet-5').minCacheTokens).toBe(1024);
+    expect(byId('claude-haiku-4-5').minCacheTokens).toBe(4096);
+  });
+
+  it('carries no row for a model OpenAI no longer publishes', () => {
+    // GPT-5.5 and GPT-5.5 Pro were dropped 2026-08-15: a raw grep of OpenAI's
+    // pricing AND models pages returns zero hits for "gpt-5.5" in any spelling.
+    // Quoting a price for a model with no published price is the same error as
+    // quoting the wrong one. This assertion is the guard against it coming back
+    // on the strength of a summarised fetch, which invented those rows twice.
+    for (const gone of ['gpt-5.5', 'gpt-5.5-pro']) {
+      expect(
+        MODELS.find((m) => m.id === gone),
+        `${gone} is back in the roster — re-check the raw pricing page before restoring it`
+      ).toBeUndefined();
+    }
+  });
+
+  it('gives the long-context tier to the models that have one, and only those', () => {
+    expect(byId('gemini-3.1-pro').longContext).toEqual({
+      thresholdTokens: 200_000,
+      inputPrice: 4.0,
+      outputPrice: 18.0,
+    });
+    // Every OpenAI row published with Short-context / Long-context columns
+    // carries the tier; the output step is 1.5x, not 2x.
+    expect(byId('gpt-5.6-sol').longContext).toEqual({
+      thresholdTokens: 272_000,
+      inputPrice: 10.0,
+      outputPrice: 45.0,
+    });
+    expect(byId('gpt-5.6-terra').longContext?.inputPrice).toBe(4.0);
+    expect(byId('gpt-5.6-luna').longContext?.outputPrice).toBe(1.8);
+    // Models with a single published tier must not invent one.
+    expect(byId('gemini-3.6-flash').longContext).toBeUndefined();
+  });
+
+  it('never advertises a saving on a model that cannot cache', () => {
+    for (const m of MODELS.filter((x) => !x.supportsCaching)) {
+      const r = calculateCachedCost(50_000, 1_000, 500, m);
+      expect(r.savingsPct, `${m.id} showed a saving without caching`).toBe(0);
+      expect(r.firstCall).toBeCloseTo(r.cachedCall, 10);
+    }
   });
 });

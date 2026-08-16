@@ -31,7 +31,7 @@
   // Derived phase
   // ---------------------------------------------------------------------------
   function computePhase(): Phase {
-    if (scrollProgress < 0.70) return 'hidden';
+    if (scrollProgress < 0.7) return 'hidden';
     return 'pill';
   }
 
@@ -48,8 +48,8 @@
       // linear interpolation within 25–35%
       const t = (scrollProgress - 0.25) / 0.1; // 0→1
       const opacity = 0.9 * (1 - t);
-      const scale   = 1 - 0.2 * t;
-      const y       = -20 * t;
+      const scale = 1 - 0.2 * t;
+      const y = -20 * t;
       return `opacity:${opacity.toFixed(3)}; transform:scale(${scale.toFixed(3)}) translateY(${y.toFixed(1)}px); visibility:visible;`;
     }
     return 'opacity:0; transform:scale(0.8) translateY(-20px); visibility:hidden;';
@@ -60,6 +60,13 @@
   // ---------------------------------------------------------------------------
   // Derived inline styles for .logo-pill
   // ---------------------------------------------------------------------------
+  // opacity + pointer-events hide this from the mouse only. The button stayed in
+  // the tab order while invisible — a dead focus stop near the top of both home
+  // pages — and its own `:focus-visible` outline could never show, because this
+  // inline opacity outranks any stylesheet rule short of !important, which the
+  // house rules forbid. The `inert` attribute on the element below removes it
+  // from the tab order and the accessibility tree while hidden, which is the
+  // honest version of "not there".
   const pillStyle: string = $derived(
     phase === 'pill' ? 'opacity:1; pointer-events:auto;' : 'opacity:0; pointer-events:none;'
   );
@@ -67,9 +74,7 @@
   // ---------------------------------------------------------------------------
   // Alt / aria text
   // ---------------------------------------------------------------------------
-  const altText: string = $derived(
-    lang === 'ru' ? 'Логотип VKVstudio' : 'VKVstudio logo'
-  );
+  const altText: string = $derived(lang === 'ru' ? 'Логотип VKVstudio' : 'VKVstudio logo');
 
   // ---------------------------------------------------------------------------
   // Scroll handler
@@ -87,7 +92,8 @@
   // Click-to-top handler
   // ---------------------------------------------------------------------------
   function scrollToTop(): void {
-    const lenis = (window as { lenisInstance?: { scrollTo: (target: number) => void } }).lenisInstance;
+    const lenis = (window as { lenisInstance?: { scrollTo: (target: number) => void } })
+      .lenisInstance;
     if (lenis) {
       lenis.scrollTo(0);
     } else {
@@ -102,7 +108,9 @@
     // prefers-reduced-motion
     const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
     prefersReduced = mq.matches;
-    const onMqChange = (e: MediaQueryListEvent): void => { prefersReduced = e.matches; };
+    const onMqChange = (e: MediaQueryListEvent): void => {
+      prefersReduced = e.matches;
+    };
     mq.addEventListener('change', onMqChange);
 
     // scroll listener
@@ -128,6 +136,7 @@
     type="button"
     class="logo-pill"
     style={pillStyle}
+    inert={phase !== 'pill'}
     aria-label={t(lang, 'nav.logoScrollToTop')}
     onclick={scrollToTop}
     tabindex={phase === 'pill' ? 0 : -1}
@@ -137,7 +146,7 @@
       <source srcset="/vkv-logo-compact.webp" type="image/webp" />
       <img
         src="/vkv-logo-compact.png"
-        alt={altText}
+        alt=""
         class="logo-img-compact"
         draggable="false"
         width="40"
@@ -152,47 +161,6 @@
     display: contents;
   }
 
-  /* ------------------------------------------------------------------
-     Hero element
-  ------------------------------------------------------------------ */
-  .logo-hero {
-    position: fixed;
-    top: 24px;
-    left: 24px;
-    z-index: 90;
-    transition:
-      opacity 0.35s ease,
-      transform 0.35s ease;
-    will-change: opacity, transform;
-    pointer-events: none;
-  }
-
-  /* Breathing glow — hero phase only, skipped when reduced */
-  .logo-hero:not(.reduced) .logo-img {
-    animation: logo-breathe 3s ease-in-out infinite;
-  }
-
-  .logo-img {
-    display: block;
-    width: 120px;
-    height: 80px;
-    object-fit: contain;
-    user-select: none;
-  }
-
-  /* Mobile — center logo horizontally */
-  @media (max-width: 767px) {
-    .logo-hero {
-      left: 50%;
-      translate: -50% 0;
-      transform-origin: center top;
-    }
-
-    .logo-img {
-      width: 80px;
-      height: 56px;
-    }
-  }
 
   /* ------------------------------------------------------------------
      Pill
@@ -241,27 +209,12 @@
     user-select: none;
   }
 
-  /* ------------------------------------------------------------------
-     Breathing glow keyframes
-  ------------------------------------------------------------------ */
-  @keyframes logo-breathe {
-    0%, 100% {
-      filter: drop-shadow(0 0 8px hsla(155, 70%, 50%, 0.3));
-    }
-    50% {
-      filter: drop-shadow(0 0 20px hsla(155, 70%, 50%, 0.6));
-    }
-  }
 
   /* Respect reduced motion globally */
   @media (prefers-reduced-motion: reduce) {
-    .logo-hero,
     .logo-pill {
       transition: none;
       animation: none;
-    }
-    .logo-img {
-      animation: none !important;
     }
   }
 </style>

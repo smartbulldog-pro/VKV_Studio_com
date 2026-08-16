@@ -1,6 +1,15 @@
 ---
 /**
- * Footer — Minimal footer with built-with info and social links
+ * Footer — copyright, built-with, the site's secondary links, and the language
+ * switcher.
+ *
+ * Rendered by BaseLayout, so it is on every page. It used to be imported by
+ * the homepage alone: ten of the twelve pages — all three Lab tools in both
+ * languages, the Build Log and the Privacy Policy — ended with nothing. A
+ * visitor who arrived on /en/lab/tokenizer/ from a search result had no link
+ * to the Privacy Policy, no link to the Build Log, and no way at all to reach
+ * the Russian version short of editing the URL. The Lab pages are the ones a
+ * stranger is most likely to land on directly.
  */
 import type { Lang } from '@i18n/utils';
 import { t, getAltLang } from '@i18n/utils';
@@ -12,6 +21,20 @@ interface Props {
 const { lang } = Astro.props;
 const altLang = getAltLang(lang);
 const year = new Date().getFullYear();
+
+/**
+ * The same page in the other language — not that language's homepage.
+ *
+ * Swapping only the leading locale segment keeps the reader where they were:
+ * /en/lab/tokenizer/ → /ru/lab/tokenizer/. Every route on this site exists in
+ * both locales (getStaticPaths returns en and ru for all of them), so the
+ * target is always real. Anything without a locale prefix — the root shell —
+ * has no counterpart to preserve and falls back to the locale root.
+ */
+const path = Astro.url.pathname;
+const altHref = /^\/(en|ru)(\/|$)/.test(path)
+  ? path.replace(/^\/(en|ru)/, `/${altLang}`)
+  : `/${altLang}/`;
 ---
 
 <footer class="site-footer">
@@ -54,7 +77,8 @@ const year = new Date().getFullYear();
       </a>
       {/* Language switcher — moved from header */}
       <a
-        href={`/${altLang}/`}
+        href={altHref}
+        hreflang={altLang}
         class="footer__lang-switch"
         id="footer-lang-switch"
         aria-label={`// lang: ${lang} → ${altLang} — ${t(lang, 'footer.langSwitchLabel')}`}
@@ -172,6 +196,12 @@ const year = new Date().getFullYear();
   }
 
   .footer__privacy-link {
+    /* Standalone footer nav links (not inline in a sentence like the tech links
+       above), so WCAG 2.5.8's inline exemption does not apply — give them a 24px
+       tap target. Text size/appearance unchanged. */
+    display: inline-flex;
+    align-items: center;
+    min-height: 24px;
     font-family: var(--font-mono);
     font-size: var(--text-xs);
     color: var(--text-muted);

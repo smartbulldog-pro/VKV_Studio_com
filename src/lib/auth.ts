@@ -114,14 +114,38 @@ function _restore(): void {
   _profile = profile;
 }
 
+/**
+ * Drop the session if the token has expired since we took it.
+ *
+ * Expiry was checked once, in `_restore()`, at module load. A Google ID token
+ * lives about an hour — comfortably shorter than a session spent reading a
+ * build log — so it expired *during* use and nothing noticed. The UI went on
+ * showing the account, the avatar and "signed in as", while every request
+ * carrying that token came back 401 and every sync silently did nothing. The
+ * honest state is signed out, and it is better reached a minute early than an
+ * hour late: the same 30 s of slack `_restore` uses, for the same reason.
+ *
+ * Returns true when the session is still good.
+ */
+function _dropIfExpired(): boolean {
+  if (_idToken === null) return false;
+  const exp = tokenExpiry(_idToken);
+  if (exp !== null && exp * 1000 > Date.now() + 30_000) return true;
+  _idToken = null;
+  _profile = null;
+  _persist(null);
+  emitAuthChange(); // so the islands repaint as signed out instead of pretending
+  return false;
+}
+
 export function getIdToken(): string | null {
-  return _idToken;
+  return _dropIfExpired() ? _idToken : null;
 }
 export function getProfile(): SynapseProfile | null {
-  return _profile;
+  return _dropIfExpired() ? _profile : null;
 }
 export function isSignedIn(): boolean {
-  return _idToken !== null;
+  return _dropIfExpired();
 }
 
 // ─── Change notification (so Svelte islands can react) ────────────────────────
@@ -272,6 +296,6 @@ export function signOut(): void {
   }
   _idToken = null;
   _profile = null;
-  _persist(null);  // must clear storage too, or the next page load signs them back in
+  _persist(null); // must clear storage too, or the next page load signs them back in
   emitAuthChange();
 }
