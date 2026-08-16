@@ -1200,6 +1200,13 @@
 
   function onMouseMove(e: MouseEvent): void {
     if (!overlayEl || !canvasEl) return;
+    // Mobile taps replay as synthetic mousemoves; the canvas hit-testing
+    // below would then arm hoveredNode/isLangHov/isLogHov against node
+    // positions that only exist in the DESKTOP canvas layout (the canvas is
+    // display:none on phones) — a background tap could navigate somewhere
+    // random instead of just closing. handleClick's else-branch (onClose)
+    // is still wanted on mobile, so only the hit-testing is gated.
+    if (window.matchMedia('(max-width: 767px)').matches) return;
     const rect = overlayEl.getBoundingClientRect();
     rawMouseX = (e.clientX - rect.left) / rect.width;
     rawMouseY = (e.clientY - rect.top) / rect.height;
@@ -1587,10 +1594,16 @@
 
     <nav class="mobile-nav" aria-label={t(lang, 'nav.siteNavigation')}>
       {#each navItems as item, i (item.id)}
+        <!-- stopPropagation on all three mobile buttons: without it every tap
+             also bubbled to the overlay's handleClick (double-fire), matching
+             the guard the a11y/close buttons already carry. -->
         <button
           class="mobile-item"
           style="animation-delay: {i * 80}ms"
-          onclick={() => navigateTo(item.target)}
+          onclick={(e) => {
+            e.stopPropagation();
+            navigateTo(item.target);
+          }}
         >
           {lang === 'ru' ? item.labelRU : item.labelEN}
         </button>
@@ -1598,14 +1611,20 @@
       <button
         class="mobile-item"
         style="animation-delay: {navItems.length * 80}ms"
-        onclick={triggerLogNav}
+        onclick={(e) => {
+          e.stopPropagation();
+          triggerLogNav();
+        }}
       >
         {lang === 'ru' ? 'ЖУРНАЛ' : 'LOG'}
       </button>
       <button
         class="lang-switch-mobile"
         style="animation-delay: {(navItems.length + 1) * 80}ms"
-        onclick={triggerLangSwitch}
+        onclick={(e) => {
+          e.stopPropagation();
+          triggerLangSwitch();
+        }}
       >
         <span class="lang-active">{lang.toUpperCase()}</span>
         <span class="lang-arrow">→</span>
@@ -1690,8 +1709,10 @@
 
   .close-btn {
     position: absolute;
-    top: 20px;
-    right: 20px;
+    /* env(): the overlay is inset:0 over a viewport-fit=cover page — keep
+       the close control out of the status-bar strip in the installed PWA. */
+    top: calc(20px + env(safe-area-inset-top, 0px));
+    right: calc(20px + env(safe-area-inset-right, 0px));
     z-index: 10;
     background: hsla(220, 20%, 12%, 0.5);
     border: 1px solid hsla(220, 15%, 30%, 0.3);

@@ -80,6 +80,11 @@
   // When the user asks for reduced motion, we draw ONE static frame of the neural
   // network instead of running the continuous rAF loop (CSS can't stop rAF).
   let reduceMotion = false;
+  // This island never unmounts, so without a visibility gate the loop ran at
+  // up to 60fps for the ENTIRE visit — including while the user reads
+  // About/Stack/FAQ far below the fold. IntersectionObserver (lifecycle
+  // effect) flips this and starts/stops the loop.
+  let heroInView = true;
   let frameCount = 0;
   let lastSpawn = [0, 0, 0];
   let lastMouseFork = 0;
@@ -416,7 +421,12 @@
     }
 
     // Reduced motion: draw exactly one frame, then stop (don't re-request).
-    if (!reduceMotion) animFrameId = requestAnimationFrame(animateNeural);
+    // Out of view: stop too — the observer below restarts the loop on re-entry.
+    if (!reduceMotion && heroInView) {
+      animFrameId = requestAnimationFrame(animateNeural);
+    } else {
+      animFrameId = null;
+    }
   }
 
   /* ── Mouse tracking ─────────────────────────────────── */
@@ -466,7 +476,29 @@
     initNetwork(rect.width, rect.height);
     // Start animation outside $effect to avoid reactive tracking of mouseX/mouseY.
     // Under reduced motion, animateNeural draws one frame and does not loop.
-    requestAnimationFrame(animateNeural);
+    animFrameId = requestAnimationFrame(animateNeural);
+
+    // Visibility gate for the loop (see heroInView above). Observing the
+    // container works on both branches: mobile's .hero--static is one 100svh
+    // screen, and on desktop this element leaves the viewport when the 800vh
+    // scrub is over — either way, below the fold the orbit stops burning CPU.
+    const visObserver = new IntersectionObserver((entries) => {
+      const last = entries[entries.length - 1];
+      if (!last) return;
+      if (last.isIntersecting) {
+        heroInView = true;
+        if (!reduceMotion && animFrameId === null) {
+          animFrameId = requestAnimationFrame(animateNeural);
+        }
+      } else {
+        heroInView = false;
+        if (animFrameId !== null) {
+          cancelAnimationFrame(animFrameId);
+          animFrameId = null;
+        }
+      }
+    });
+    visObserver.observe(containerEl);
 
     // Entrance animation
     setTimeout(() => {
@@ -483,11 +515,16 @@
       const c = neuralCanvas!.getContext('2d');
       if (c) c.scale(dpr, dpr);
       initNetwork(r.width, r.height);
+      // Resizing cleared the bitmap; under reduced motion no loop repaints it.
+      // Guarded: with the loop running, a direct call would schedule a SECOND
+      // concurrent rAF chain (the tail re-requests when !reduceMotion).
+      if (reduceMotion) animateNeural();
     };
     window.addEventListener('resize', onResize);
 
     return () => {
       if (animFrameId !== null) cancelAnimationFrame(animFrameId);
+      visObserver.disconnect();
       window.removeEventListener('resize', onResize);
     };
   });
@@ -918,6 +955,21 @@
   @media (max-width: 768px) {
     .hero-overlay__content {
       gap: var(--space-3);
+      /* Frosted backdrop so the text stops drowning in the bright neural
+         video (owner's phone screenshot). The Stack section's 2026 glass
+         recipe, gentled for a text panel: lighter veil, no grain — the
+         letters need a calm surface. Mobile-only: on desktop the text has
+         breathing room and the panel would read as a box. */
+      background: hsla(220, 20%, 8%, 0.55);
+      backdrop-filter: blur(18px) saturate(150%);
+      -webkit-backdrop-filter: blur(18px) saturate(150%);
+      border: 1px solid hsla(0, 0%, 100%, 0.06);
+      border-radius: var(--radius-xl, 16px);
+      box-shadow:
+        inset 0 1px 0 hsla(0, 0%, 100%, 0.06),
+        0 8px 32px hsla(0, 0%, 0%, 0.35);
+      padding: var(--space-6) var(--space-4);
+      margin-inline: var(--space-4);
     }
     .hero-overlay__title {
       font-size: clamp(1.8rem, 8vw, 3rem);

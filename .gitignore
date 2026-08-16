@@ -87,5 +87,11 @@ inference/rag/corpus_vectors.json
 # Lighthouse harness scratch output (.system/measure.py) — regenerable
 .system/_lh/
 
-# stray backend run logs — dev scratch, not part of the release
-*.out
+# Scratch and run artifacts that a `git add -A` would otherwise sweep in.
+# Added 2026-08-15 after exactly that happened: seventeen files — a previous
+# session's scratch directory and a batch of training logs — landed in a commit
+# about audit fixes and had to be reset back out.
+.tmp-skeptic/
+training/*.log
+training/*.out
+training/EXPORT_OK_*

@@ -1873,31 +1873,35 @@
     top: 0;
   }
 
+  /* All chrome offsets add env(safe-area-inset-*): the terminal is a fixed
+     inset:0 panel over a viewport-fit=cover page, so in the installed PWA
+     flat offsets land in the status-bar / home-indicator strips. env() is
+     0px everywhere that has no notch. */
   .corner-tl {
-    top: 20px;
-    left: 20px;
+    top: calc(20px + env(safe-area-inset-top, 0px));
+    left: calc(20px + env(safe-area-inset-left, 0px));
   }
   .corner-tr {
-    top: 20px;
-    right: 20px;
+    top: calc(20px + env(safe-area-inset-top, 0px));
+    right: calc(20px + env(safe-area-inset-right, 0px));
     transform: scaleX(-1);
   }
   .corner-bl {
-    bottom: 20px;
-    left: 20px;
+    bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+    left: calc(20px + env(safe-area-inset-left, 0px));
     transform: scaleY(-1);
   }
   .corner-br {
-    bottom: 20px;
-    right: 20px;
+    bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+    right: calc(20px + env(safe-area-inset-right, 0px));
     transform: scale(-1);
   }
 
   /* ── Close button ─────────────────────────────────────────────────────────── */
   .close-btn {
     position: absolute;
-    top: 20px;
-    right: 20px;
+    top: calc(20px + env(safe-area-inset-top, 0px));
+    right: calc(20px + env(safe-area-inset-right, 0px));
     z-index: 10;
     display: flex;
     align-items: center;
@@ -1931,8 +1935,8 @@
   /* ── Hamburger button (sidebar toggle) ──────────────────────────────────── */
   .hamburger-btn {
     position: absolute;
-    top: 20px;
-    left: 20px;
+    top: calc(20px + env(safe-area-inset-top, 0px));
+    left: calc(20px + env(safe-area-inset-left, 0px));
     z-index: 10;
     display: flex;
     align-items: center;
@@ -2549,7 +2553,9 @@
     width: 100%;
     max-width: 760px;
     margin: 0 auto;
-    padding: clamp(12px, 2vh, 20px) clamp(1rem, 4vw, 2.5rem) clamp(16px, 3vh, 28px);
+    /* + env(): keep the mic/send row above the home-indicator swipe strip. */
+    padding: clamp(12px, 2vh, 20px) clamp(1rem, 4vw, 2.5rem)
+      calc(clamp(16px, 3vh, 28px) + env(safe-area-inset-bottom, 0px));
     display: flex;
     align-items: flex-end;
     gap: 10px;
@@ -2800,13 +2806,13 @@
     }
 
     .close-btn {
-      top: 12px;
-      right: 12px;
+      top: calc(12px + env(safe-area-inset-top, 0px));
+      right: calc(12px + env(safe-area-inset-right, 0px));
     }
 
     .hamburger-btn {
-      top: 12px;
-      left: 12px;
+      top: calc(12px + env(safe-area-inset-top, 0px));
+      left: calc(12px + env(safe-area-inset-left, 0px));
     }
 
     .corner {
@@ -2815,20 +2821,20 @@
     }
 
     .corner-tl {
-      top: 12px;
-      left: 12px;
+      top: calc(12px + env(safe-area-inset-top, 0px));
+      left: calc(12px + env(safe-area-inset-left, 0px));
     }
     .corner-tr {
-      top: 12px;
-      right: 12px;
+      top: calc(12px + env(safe-area-inset-top, 0px));
+      right: calc(12px + env(safe-area-inset-right, 0px));
     }
     .corner-bl {
-      bottom: 12px;
-      left: 12px;
+      bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+      left: calc(12px + env(safe-area-inset-left, 0px));
     }
     .corner-br {
-      bottom: 12px;
-      right: 12px;
+      bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+      right: calc(12px + env(safe-area-inset-right, 0px));
     }
   }
 </style>

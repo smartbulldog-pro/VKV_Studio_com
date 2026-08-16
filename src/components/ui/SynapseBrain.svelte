@@ -50,10 +50,35 @@
       heroSection: heroSection,
     });
 
+    // Publish how much of the footer is on screen so the orb (fixed
+    // bottom-right) can ride above it instead of squatting on the footer's
+    // links — same contract as CookieConsent's --consent-sheet-height.
+    // Threshold steps + the CSS `bottom` transition smooth out the ride.
+    // `bottom` is safe to drive from CSS: no script writes it inline —
+    // brain-morph.ts writes only opacity/pointerEvents/cursor, and the one
+    // inline `transform` writer (SynapseApp's GSAP scale tween) is already
+    // neutralized on mobile by this file's `transform: none !important`.
+    const footerEl = document.querySelector('footer');
+    let footerObserver: IntersectionObserver | null = null;
+    if (footerEl) {
+      footerObserver = new IntersectionObserver(
+        (entries) => {
+          const last = entries[entries.length - 1];
+          if (!last) return;
+          const overlap = last.isIntersecting ? Math.round(last.intersectionRect.height) : 0;
+          document.documentElement.style.setProperty('--footer-clearance', `${overlap}px`);
+        },
+        { threshold: [0, 0.15, 0.3, 0.45, 0.6, 0.75, 0.9, 1] }
+      );
+      footerObserver.observe(footerEl);
+    }
+
     return () => {
       engine?.destroy();
       engine = null;
       observer.disconnect();
+      footerObserver?.disconnect();
+      document.documentElement.style.removeProperty('--footer-clearance');
     };
   });
 
@@ -98,6 +123,25 @@
       src="/neural-brain.png"
       alt={t(lang, 'synapse.brain.alt')}
       class="synapse-fallback"
+      aria-hidden="true"
+      width="80"
+      height="80"
+    />
+  </picture>
+
+  <!-- Static ready-state identity for mobile: a REAL <img>, not a canvas
+       draw. The mobile `.ready` swap used to hand the circle back to the
+       canvas, whose synapse-text drawImage silently failed on phones —
+       leaving an empty dark circle exactly where the brand should be
+       (owner's screenshot). A static identity must never depend on a
+       runtime draw succeeding. -->
+  <picture>
+    <source srcset="/synapse-text.avif" type="image/avif" />
+    <source srcset="/synapse-text.webp" type="image/webp" />
+    <img
+      src="/synapse-text.png"
+      alt=""
+      class="synapse-ready-img"
       aria-hidden="true"
       width="80"
       height="80"
@@ -177,27 +221,10 @@
       border-color var(--duration-normal) var(--ease-out);
   }
 
-  /* Step clear of the cookie sheet while it is on screen. Below 640px that
-     banner is a full-width sheet flush with the bottom edge and it wins on
-     z-index (500 against this element's 90), so on a first visit the entry
-     point into the assistant is buried under the consent prompt.
-     --consent-sheet-height is published by CookieConsent.svelte only while the
-     sheet is visible; the moment it is dismissed the property disappears and
-     this collapses back to the plain 24px. */
-  @media (max-width: 640px) {
-    .synapse-container {
-      bottom: calc(24px + var(--consent-sheet-height, 0px));
-    }
-  }
-
-  @media (max-width: 640px) and (prefers-reduced-motion: no-preference) {
-    .synapse-container {
-      transition:
-        box-shadow var(--duration-normal) var(--ease-out),
-        border-color var(--duration-normal) var(--ease-out),
-        bottom var(--duration-normal) var(--ease-out);
-    }
-  }
+  /* The cookie-sheet / footer offsets live in the mobile block at the BOTTOM
+     of this stylesheet — they must come after the 767px geometry block to win
+     the cascade. A 640px block here used to hold the consent offset, and the
+     later 767px `bottom: 16px` silently overrode it on every phone. */
 
   /* Ready glow */
   .synapse-container:global(.ready) {
@@ -248,6 +275,18 @@
     border-radius: 50%;
   }
 
+  /* Static ready-state image (mobile) — same geometry as the fallback;
+     `contain` because synapse-text is a wordmark, not a photo. */
+  .synapse-ready-img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    display: none;
+    border-radius: 50%;
+  }
+
   @media (prefers-reduced-motion: reduce) {
     .synapse-fallback { display: block; }
     .synapse-canvas   { display: none;  }
@@ -271,9 +310,12 @@
   }
 
   /* ── Tooltip ───────────────────────────────────────────────────── */
+  /* Standalone-fallback only (unreachable while SynapseApp always passes
+     onActivate) — but keep it riding the same offsets as the orb so the
+     fallback does not detach the day it is exercised. */
   .synapse-tooltip {
     position: fixed;
-    bottom: calc(24px + 88px);
+    bottom: calc(24px + 88px + var(--consent-sheet-height, 0px) + var(--footer-clearance, 0px));
     right: 24px;
     z-index: 91;
 
@@ -316,7 +358,13 @@
     .synapse-container {
       left: auto !important;
       right: 16px;
-      bottom: 16px;
+      /* --footer-clearance: published by the effect above while the footer
+         intersects the viewport — the orb rides up so it never squats on the
+         footer's links (every mobile visitor ends the page there).
+         env(safe-area-inset-bottom): with viewport-fit=cover the page reaches
+         the true screen edge — in the installed PWA (standalone) the old flat
+         16px put the orb inside the home-indicator swipe strip. */
+      bottom: calc(16px + env(safe-area-inset-bottom, 0px) + var(--footer-clearance, 0px));
       transform: none !important;
       width: 64px;
       height: 64px;
@@ -324,20 +372,50 @@
 
     .synapse-tooltip {
       right: 16px;
-      bottom: calc(16px + 72px);
+      bottom: calc(16px + 72px + var(--consent-sheet-height, 0px) + var(--footer-clearance, 0px));
     }
+  }
 
+  /* Step clear of the cookie sheet while it is on screen. Below 640px that
+     banner is a full-width sheet flush with the bottom edge and it wins on
+     z-index (500 against this element's 90), so on a first visit the entry
+     point into the assistant is buried under the consent prompt.
+     --consent-sheet-height is published by CookieConsent.svelte only while
+     the sheet is visible; once dismissed the property disappears and this
+     collapses back. AFTER the 767px block on purpose: an earlier placement
+     lost the cascade to `bottom: 16px` above and was dead on every phone. */
+  @media (max-width: 640px) {
+    .synapse-container {
+      bottom: calc(
+        16px + env(safe-area-inset-bottom, 0px) + var(--consent-sheet-height, 0px) +
+          var(--footer-clearance, 0px)
+      );
+    }
+  }
+
+  @media (max-width: 767px) and (prefers-reduced-motion: no-preference) {
+    .synapse-container {
+      transition:
+        box-shadow var(--duration-normal) var(--ease-out),
+        border-color var(--duration-normal) var(--ease-out),
+        bottom var(--duration-normal) var(--ease-out);
+    }
+  }
+
+  @media (max-width: 767px) {
     /* brain-morph.mp4 is never fetched on mobile (see brain-morph.ts) —
        show the static neural-brain fallback image instead of a blank
        canvas while the hero is in view. */
     .synapse-fallback { display: block; }
     .synapse-canvas   { display: none;  }
 
-    /* Once "ready" (About section visible), the canvas draws the
-       synapse-text ready image — a static asset independent of the
-       video — so swap back to match desktop's ready-state look. */
-    .synapse-container:global(.ready) .synapse-fallback { display: none;  }
-    .synapse-container:global(.ready) .synapse-canvas   { display: block; }
+    /* Once "ready" (About visible): show the STATIC synapse-text <img>,
+       never the canvas — on phones the canvas ready-draw silently failed
+       and left an empty circle where the brand should be. The circle now
+       always shows something real: brain image before ready, wordmark
+       after. Canvas stays a desktop-only concern. */
+    .synapse-container:global(.ready) .synapse-fallback  { display: none;  }
+    .synapse-container:global(.ready) .synapse-ready-img { display: block; }
   }
 
   @media (prefers-reduced-motion: reduce) {

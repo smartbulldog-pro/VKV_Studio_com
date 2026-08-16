@@ -45,17 +45,35 @@ export function initSectionAnimations(): void {
   // users got ZERO hover feedback ever. Reduced motion means "no eased
   // tweening", not "the interaction does not exist" — initStackHoverEffects()
   // resolves every duration to 0 internally instead.
-  initStackHoverEffects();
+  try {
+    initStackHoverEffects();
+  } catch (err) {
+    console.error('[section-animations] stack hover init failed:', err);
+  }
 
   if (prefersReducedMotion) {
     disableAnimations();
     return;
   }
 
-  initAboutAnimations();
-  initLabAnimations();
-  initStackAnimations();
-  initContactAnimations();
+  // Each section's init is isolated: About/Lab/Stack/Contact all start at
+  // opacity:0 in their scoped CSS and rely on these calls to ever appear.
+  // One throw used to abort the rest of this synchronous chain — every
+  // section after the faulty one stayed invisible forever. If anything
+  // fails, degrade the WHOLE page to "visible, no animation" rather than
+  // leave content missing (disableAnimations already coexists with any
+  // ScrollTriggers that did get created — worst case a reveal replays).
+  const inits = [initAboutAnimations, initLabAnimations, initStackAnimations, initContactAnimations];
+  let anyFailed = false;
+  for (const init of inits) {
+    try {
+      init();
+    } catch (err) {
+      anyFailed = true;
+      console.error('[section-animations] section init failed:', err);
+    }
+  }
+  if (anyFailed) disableAnimations();
 }
 
 /* ── ABOUT SECTION ─────────────────────────────────────────── */
@@ -295,6 +313,11 @@ function initLabAnimations(): void {
           x: 0,
           duration: 0.4,
           ease: 'power2.out',
+          // Hand opacity BACK to the stylesheet when the reveal ends: the
+          // tween's inline 0.6 otherwise pins the CTA forever, and every CSS
+          // state — :hover 1, touch-rest 0.85, :active 1 — is dead against an
+          // inline style. x stays GSAP-owned (CSS never styles it at rest).
+          clearProps: 'opacity',
         },
         0.5
       );

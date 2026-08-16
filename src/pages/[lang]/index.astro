@@ -76,12 +76,34 @@ const faqJsonLd = {
 </BaseLayout>
 
 <script>
-  import { initSectionAnimations } from '@scripts/section-animations';
+  // Dynamic import so a failed chunk fetch (flaky mobile network) degrades to
+  // "content visible, no animation" instead of "sections invisible forever":
+  // About/Lab/Stack/Contact all start at opacity:0 and only the animation
+  // module reveals them. The rescue selector list mirrors disableAnimations()
+  // in section-animations.ts — keep the two in sync (it can't be imported
+  // here: the whole point is that the import may have failed).
+  async function startSectionAnimations() {
+    try {
+      const { initSectionAnimations } = await import('@scripts/section-animations');
+      initSectionAnimations();
+    } catch (err) {
+      console.error('[index] section-animations chunk failed to load:', err);
+      document
+        .querySelectorAll<HTMLElement>(
+          '.js-about-reveal, .js-timeline-item, .js-timeline-dot, .js-timeline-card, .js-timeline-line, .js-lab-header, .js-lab-card, .lab__card-visual, .lab__card-content, .lab__card-cta, .js-stack-header, .js-stack-card, .js-stack-glass, .js-contact-reveal'
+        )
+        .forEach((el) => {
+          el.style.opacity = '1';
+          el.style.transform = 'none';
+          el.style.filter = 'none';
+        });
+    }
+  }
 
   // Initialize after DOM is ready (Lenis already started in HeroCanvas)
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initSectionAnimations);
+    document.addEventListener('DOMContentLoaded', () => void startSectionAnimations());
   } else {
-    initSectionAnimations();
+    void startSectionAnimations();
   }
 </script>

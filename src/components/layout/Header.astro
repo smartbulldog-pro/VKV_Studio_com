@@ -38,8 +38,11 @@ const { lang } = Astro.props;
   /* ── Menu Pill ─────────────────────────────────────────────── */
   .menu-pill {
     position: fixed;
-    top: 16px;
-    right: 16px;
+    /* env(): with viewport-fit=cover the fixed pill measures from the true
+       screen edge — in the installed PWA a flat 16px lands it in the
+       status-bar / Dynamic-Island strip. 0px everywhere else. */
+    top: calc(16px + env(safe-area-inset-top, 0px));
+    right: calc(16px + env(safe-area-inset-right, 0px));
     display: flex;
     gap: 6px;
     align-items: center;

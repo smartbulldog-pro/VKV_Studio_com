@@ -91,7 +91,11 @@ const ogImageAlt =
 <html lang={lang}>
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- viewport-fit=cover: without it every env(safe-area-inset-*) in the
+         codebase resolves to its 0px fallback on ALL browsers (spec-mandated),
+         so the safe-area handling that exists (cookie sheet) was a no-op on
+         notched/gesture-bar phones. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="description" content={pageDescription} />
 
     <!-- Self-hosted fonts preload — only the Inter subset for THIS locale is on the

@@ -175,6 +175,22 @@ const jsonLd = [
     background: var(--bg-obsidian);
   }
 
+  /* Same mobile head-room trim as the Build Log / privacy pages: there is no
+     fixed header here to clear, so desktop's 128px is dead air on a phone.
+     + --consent-sheet-height mirrors their first-visit cookie-sheet nudge. */
+  @media (max-width: 767px) {
+    .lab-page {
+      padding-top: calc(var(--space-16) + var(--consent-sheet-height, 0px));
+    }
+  }
+
+  /* No snap when the sheet is dismissed mid-slide — see log page. */
+  @media (max-width: 767px) and (prefers-reduced-motion: no-preference) {
+    .lab-page {
+      transition: padding-top var(--duration-normal) var(--ease-out);
+    }
+  }
+
   .lab-header {
     text-align: center;
     margin-bottom: var(--space-12);

@@ -16,9 +16,20 @@
   let cardEl: HTMLDivElement | undefined = $state();
   let isHovered = $state(false);
 
+  // Touch guard: a tap fires the browser's synthetic ghost-mousemove, which
+  // used to set a translate() that NOTHING ever reset — no real pointer means
+  // no mouseleave, so the card stayed skewed until reload. Plain (non-$state)
+  // on purpose: only read inside handlers, and assigned in $effect so the
+  // matchMedia call never runs during the build-time SSR pass.
+  let supportsHover = false;
+  $effect(() => {
+    supportsHover = window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+  });
+
   function onMouseMove(e: MouseEvent): void {
     // Respect prefers-reduced-motion (CLAUDE.md house rule): no cursor-follow motion.
-    if (!cardEl || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    if (!cardEl || !supportsHover || matchMedia('(prefers-reduced-motion: reduce)').matches)
+      return;
     const rect = cardEl.getBoundingClientRect();
     const x = e.clientX - rect.left - rect.width / 2;
     const y = e.clientY - rect.top - rect.height / 2;
@@ -32,16 +43,21 @@
   }
 
   function onMouseEnter(): void {
+    if (!supportsHover) return;
     isHovered = true;
   }
 </script>
 
+<!-- touchend/touchcancel → same reset as mouseleave: belt-and-suspenders for
+     hybrids (touchscreen laptops) where hover:hover matches but the user taps. -->
 <div
   class="magnetic-wrapper"
   bind:this={cardEl}
   onmousemove={onMouseMove}
   onmouseleave={onMouseLeave}
   onmouseenter={onMouseEnter}
+  ontouchend={onMouseLeave}
+  ontouchcancel={onMouseLeave}
   class:is-hovered={isHovered}
 >
   {@render children?.()}

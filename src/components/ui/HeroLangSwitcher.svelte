@@ -29,12 +29,38 @@
 
   const ORBIT_R = 18;
 
-  /* ── Sync visibility with hero overlay opacity ────────── */
+  /* ── Sync visibility with the hero ─────────────────────── */
   $effect(() => {
+    const isMobile = window.matchMedia('(max-width: 767px)').matches;
+
+    if (isMobile) {
+      // Mobile: scroll-engine.ts never runs (HeroCanvas's init() takes the
+      // `.hero--static` branch), so #hero-overlay's inline opacity — the
+      // desktop signal below — is never written and `visible` stayed true
+      // forever: the switcher floated over About/Stack/FAQ all the way down.
+      // `.hero--static` collapses the hero to one 100svh screen, so a plain
+      // IntersectionObserver on it is the honest signal here. Do NOT use it
+      // on desktop: the hero is 800vh there and isIntersecting would stay
+      // true for ~700vh of scroll.
+      const heroSection = document.getElementById('hero-section');
+      if (!heroSection) return;
+      const io = new IntersectionObserver(
+        (entries) => {
+          const last = entries[entries.length - 1];
+          if (last) visible = last.isIntersecting;
+        },
+        { threshold: 0.3 }
+      );
+      io.observe(heroSection);
+      return () => io.disconnect();
+    }
+
+    // Desktop: overlay opacity is written by scroll-engine.ts (inline style);
+    // it hits 0.3 at ~18% of the scrub — that fraction-based fade is the
+    // behaviour to keep.
     const overlayEl = document.getElementById('hero-overlay');
     if (!overlayEl) return;
 
-    // Check overlay opacity (set by scroll-engine.ts inline style)
     function checkOpacity() {
       const op = parseFloat(overlayEl!.style.opacity || '1');
       visible = op > 0.3;
@@ -48,6 +74,37 @@
   });
 
   /* ── Canvas setup & animation ─────────────────────── */
+
+  // Assigned by the setup effect below; the visibility-gate effect after it
+  // starts/stops the loop. Plain (non-$state) on purpose — only read from
+  // event/rAF contexts, never from templates.
+  let drawFrame: (() => void) | null = null;
+  let reduceMotion = false;
+
+  function animate() {
+    drawFrame?.();
+    animFrameId = requestAnimationFrame(animate);
+  }
+
+  function startLoop() {
+    if (!drawFrame) return;
+    if (reduceMotion) {
+      // One static paint, no perpetual orbit — same contract as
+      // HeroOverlay's neural canvas.
+      drawFrame();
+      return;
+    }
+    if (animFrameId !== null) return;
+    animFrameId = requestAnimationFrame(animate);
+  }
+
+  function stopLoop() {
+    if (animFrameId !== null) {
+      cancelAnimationFrame(animFrameId);
+      animFrameId = null;
+    }
+  }
+
   $effect(() => {
     if (!canvasEl || !wrapperEl) return;
 
@@ -59,6 +116,11 @@
       canvasEl.height = r.height * dpr;
       canvasEl.style.width = `${r.width}px`;
       canvasEl.style.height = `${r.height}px`;
+      // Assigning canvas width/height CLEARS the bitmap (spec). The rAF loop
+      // repaints within a frame, but under reduced motion there is no loop —
+      // without this repaint, one toolbar show/hide or rotation left a blank
+      // (still clickable) hitbox for the rest of the session.
+      drawFrame?.();
     }
     resize();
     window.addEventListener('resize', resize);
@@ -66,7 +128,9 @@
     const ctx = canvasEl.getContext('2d', { alpha: true });
     if (!ctx) return;
 
-    function animate() {
+    reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    drawFrame = () => {
       if (!canvasEl || !ctx) return;
       const w = canvasEl.width / dpr;
       const h = canvasEl.height / dpr;
@@ -212,15 +276,22 @@
       }
 
       ctx.restore();
-      animFrameId = requestAnimationFrame(animate);
-    }
-
-    animFrameId = requestAnimationFrame(animate);
+    };
 
     return () => {
-      if (animFrameId !== null) cancelAnimationFrame(animFrameId);
+      stopLoop();
+      drawFrame = null;
       window.removeEventListener('resize', resize);
     };
+  });
+
+  /* The loop runs only while the switcher is actually on screen (`visible`
+     also feeds tabindex/inert/opacity). Before this gate the orbit burned
+     up to 60fps for the entire visit — on mobile literally forever, since
+     `visible` never flipped false there (hero-1). */
+  $effect(() => {
+    if (visible) startLoop();
+    else stopLoop();
   });
 
   /* ── Interaction ───────────────────────────────────── */
@@ -250,6 +321,20 @@
     activate();
   }
 
+  // Touch has no hover either: without arming isHov here, a tap only worked
+  // if the browser happened to replay a synthetic mousemove inside the 50px
+  // radius before its synthetic click. Arm on touchstart; disarm on a delay
+  // (not on touchend directly) because the synthetic click fires AFTER
+  // touchend — an immediate reset would swallow the very tap it enables.
+  function onTouchStart() {
+    isHov = true;
+  }
+  function onTouchEnd() {
+    setTimeout(() => {
+      isHov = false;
+    }, 400);
+  }
+
   function onKeydown(e: KeyboardEvent) {
     if (!visible) return; // hidden after scroll — no keyboard activation
     if (e.key === 'Enter' || e.key === ' ') {
@@ -268,6 +353,9 @@
   onmouseleave={() => { isHov = false; }}
   onfocus={() => { isHov = true; }}
   onblur={() => { isHov = false; }}
+  ontouchstart={onTouchStart}
+  ontouchend={onTouchEnd}
+  ontouchcancel={onTouchEnd}
   onclick={onClick}
   onkeydown={onKeydown}
   role="button"
@@ -316,12 +404,41 @@
     pointer-events: none !important;
   }
 
-  @media (max-width: 768px) {
+  /* 767, not 768: the mobile/desktop LOGIC split (this file's visibility
+     branch + HeroCanvas's hero--static) is matchMedia(max-width: 767px) —
+     at exactly 768px an iPad portrait runs the desktop scrub, so it must
+     get the desktop widget too. */
+  @media (max-width: 767px) {
     .hero-lang {
-      bottom: 1.5rem;
-      left: 1rem;
+      /* env(): viewport-fit=cover means the true screen edge — keep the
+         widget clear of the home-indicator strip in the installed PWA. */
+      bottom: calc(1.5rem + env(safe-area-inset-bottom, 0px));
+      left: calc(1rem + env(safe-area-inset-left, 0px));
       width: 64px;
       height: 64px;
+    }
+  }
+
+  /* Below 640px the cookie banner is a full-width bottom sheet (z-index 500
+     against this element's 20) parked exactly over this corner — on a first
+     visit the switcher was buried until the banner was dismissed. Step above
+     it the same way SynapseBrain does: --consent-sheet-height is published on
+     <html> by CookieConsent.svelte only while the sheet is on screen.
+     Scoped to 640px, NOT the 767px block above: between 641–767px the banner
+     is a centered floating card that never reaches this corner, so no push
+     is needed there. Must come after the 767px block to win the cascade. */
+  @media (max-width: 640px) {
+    .hero-lang {
+      bottom: calc(1.5rem + env(safe-area-inset-bottom, 0px) + var(--consent-sheet-height, 0px));
+    }
+  }
+
+  @media (max-width: 640px) and (prefers-reduced-motion: no-preference) {
+    .hero-lang {
+      transition:
+        opacity 0.6s ease-out,
+        transform 0.6s ease-out,
+        bottom var(--duration-normal) var(--ease-out);
     }
   }
 

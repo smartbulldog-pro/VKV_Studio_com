@@ -200,24 +200,15 @@
 
 /* ── RESPONSIVE ─────────────────────────────────────────────── */
 
+/* NOTE: the subtitle and CTA are OWNED by HeroOverlay.svelte's scoped styles
+   (class names `hero-overlay__subtitle` / `hero-overlay__cta`). Rules for
+   them used to live here under the old `hero__*` names — dead selectors that
+   shipped to production matching nothing, left behind when the elements moved
+   into the component. Deleted rather than renamed: the component's scoped
+   rules out-rank bare external selectors anyway, and the current mobile hero
+   (glass panel) was reviewed as-is. Style those elements in the component. */
 @media (max-width: 639px) {
-  .hero__subtitle {
-    font-size: var(--text-base);
-    max-width: 28ch;
-  }
-
-  .hero__cta {
-    padding: var(--space-3) var(--space-6);
-    font-size: var(--text-xs);
-  }
-
   .hero__scroll-indicator {
     bottom: var(--space-6);
-  }
-}
-
-@media (min-width: 1024px) {
-  .hero__subtitle {
-    max-width: 42ch;
   }
 }

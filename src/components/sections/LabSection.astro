@@ -327,6 +327,20 @@ const cards = [
     transform: translateX(4px);
   }
 
+  /* Touch devices never fire :hover — without this the "Open" affordance
+     rested permanently dim on the exact device class that most needs it
+     (no cursor to signal the card is a link). :active gives tap-down a
+     moment of feedback; hover-capable hybrids keep the rule above. */
+  @media (hover: none) {
+    .lab__card-cta {
+      opacity: 0.85;
+    }
+
+    .lab__card:active .lab__card-cta {
+      opacity: 1;
+    }
+  }
+
   /* ── Hover glow overlay ────────────────────────────────── */
   .lab__card-glow {
     position: absolute;

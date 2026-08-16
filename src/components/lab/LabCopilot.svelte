@@ -514,6 +514,11 @@
     transform: translateX(100%);
     transition: transform 0.28s ease;
     visibility: hidden;
+    /* viewport-fit=cover: the fixed full-height panel reaches the true screen
+       edges — pad the flex column so its header and input row stay clear of
+       the status bar and home-indicator strip in the installed PWA. */
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
   }
   .copilot--open {
     transform: translateX(0);

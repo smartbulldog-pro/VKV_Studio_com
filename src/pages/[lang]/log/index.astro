@@ -41,7 +41,7 @@ const content: Record<Lang, LogContent> = {
   en: {
     bootLines: [
       '> boot build.log',
-      '> loading decisions ... 25',
+      '> loading decisions ... 26',
       '> stack: antigravity · gemma 4 · google cloud ai',
       '> valerii :: still here',
     ],
@@ -432,6 +432,19 @@ const content: Record<Lang, LogContent> = {
           'Postscript, same evening. Taking the microphone away turned out to be the thing that got it fixed. With the button gone there was nothing to protect, so the honest question was simply whether speech recognition could be made to work — and the Google path, written weeks ago and never once called, failed on its first real request with a precise complaint: no sample rate. Two lines. It transcribes both languages word for word now, and the button is back. I have had worse days than one that ends with a feature I was about to write off.',
         ],
       },
+      {
+        n: '26',
+        slug: 'the-phone-saw-a-different-site',
+        date: '2026-08-16',
+        title: 'The phone was seeing a different site',
+        lead: 'Three screenshots from my own phone: the hero text drowning in its own video, the assistant reduced to an empty dark circle, and this very log opening with a screenful of nothing. The site I polish on a big monitor every day was, on a phone, a different site. A worse one.',
+        body: [
+          'The screenshots were the easy part. The text got the same frosted glass the Stack section wears, just calmer — letters need a quiet surface. The empty circle was the interesting one: on phones I skip the video and hand the circle to a canvas to paint the brand into, and that paint was failing silently. No error, just nothing. That is a rule for me now: identity must never depend on a runtime draw succeeding. It is a plain image file there today. And the emptiness up top was desktop headroom copy-pasted to where a phone has nothing to clear: a hundred and twenty-eight pixels reserved for a header this page does not have.',
+          'Then I did what worked last week: set a crowd of reviewers on the mobile version, and a second crowd on the first, attacking their findings. Eighteen survived. The one that actually embarrassed me: a fix I had already shipped and written about — the assistant’s circle stepping up above the cookie banner — had never worked on a single phone for a single day. A rule further down the same file quietly put it back. The layout checked out, the tests passed, and no phone ever saw it. Shipped is not fixed. Fixed is when you measured.',
+          'The rest is one lesson in different costumes: I built this site with a mouse. The language switcher hides on scroll on desktop; the signal it listens to is written by a scroll engine that never runs on phones — so on a phone it never hid, floating over every section all the way down, spinning its little orbit at sixty frames the whole visit. Tap a card in the Lab and it stayed skewed: the browser replays a tap as a ghost mouse-move, and there is no such event as a finger leaving. And the handling for notched iPhones resolved to zero across the whole site, because one meta tag was missing one attribute. Every hover now has to answer me one question: what does a finger do here.',
+          'A browser will happily let you build a desktop site that merely fits on a phone. Fitting and working are different things. The table of contents of this log is the most tapped spot on the page, and every row of it now stands at least forty-four pixels tall, the size of a fingertip. A number from the guidelines I knew by heart and ignored exactly where people tap the most.',
+        ],
+      },
     ],
     outro: [
       'That is the log for now. Every call here was a trade, and I made each one on purpose, even the ones I second-guessed later.',
@@ -441,7 +454,7 @@ const content: Record<Lang, LogContent> = {
   ru: {
     bootLines: [
       '> запуск build.log',
-      '> гружу решения ... 25',
+      '> гружу решения ... 26',
       '> стек: antigravity · gemma 4 · google cloud ai',
       '> валерий :: на месте',
     ],
@@ -832,6 +845,19 @@ const content: Record<Lang, LogContent> = {
           'Постскриптум, тот же вечер. Оказалось, что именно снятие микрофона его и починило. Когда кнопки не стало, защищать было нечего, и остался честный вопрос: а можно ли вообще заставить распознавание работать. Путь через Google, написанный недели назад и ни разу не вызванный, упал на первом же настоящем запросе с внятной жалобой: не указана частота дискретизации. Две строки. Теперь он разбирает оба языка слово в слово, и кнопка на месте. Бывали у меня дни хуже, чем тот, что кончается функцией, которую я уже почти списал.',
         ],
       },
+      {
+        n: '26',
+        slug: 'the-phone-saw-a-different-site',
+        date: '2026-08-16',
+        title: 'Телефон видел другой сайт',
+        lead: 'Три скриншота с моего собственного телефона: текст хиро тонет в собственном видео, ассистент превратился в пустой тёмный круг, а этот самый лог открывается экраном пустоты. Сайт, который я каждый день полирую на большом мониторе, на телефоне оказался другим сайтом. Хуже.',
+        body: [
+          'Скриншоты были простой частью. Текст получил то же матовое стекло, что носит секция стека, только спокойнее — буквам нужна тихая поверхность. Пустой круг оказался интереснее: на телефонах я не гоняю видео и отдаю круг канвасу, чтобы тот нарисовал в нём бренд, и эта отрисовка молча падала. Без ошибки, просто ничего. Теперь это у меня правило: айдентика не имеет права зависеть от того, удалась ли отрисовка во время выполнения. Там теперь обычная картинка. А пустота сверху — это десктопный отступ, скопированный туда, где на телефоне нечего отступать: сто двадцать восемь пикселей под шапку, которой на этой странице нет.',
+          'Дальше я сделал то, что сработало на прошлой неделе: натравил на мобильную версию толпу проверяющих, а на них — вторую толпу, которая нападала на их находки. Выжило восемнадцать. По-настоящему смутила меня одна: починка, которую я уже выкатил и про которую написал, — кружок ассистента, отступающий вверх от плашки про куки, — не работала ни на одном телефоне ни единого дня. Правило ниже в том же файле тихо возвращало его на место. Вёрстка сходилась, тесты проходили, а телефон этого просто никогда не видел. Выкачено — не значит починено. Починено — это когда измерил.',
+          'Остальное — один и тот же урок в разных костюмах: я собирал этот сайт мышкой. Переключатель языка на десктопе прячется при прокрутке; сигнал, который он слушает, пишет движок прокрутки, который на телефонах не запускается вовсе, — так что на телефоне он не прятался никогда, висел поверх каждой секции до самого низа и всю дорогу крутил свою маленькую орбиту на шестидесяти кадрах. Тапни карточку в лаборатории — она оставалась перекошенной: тап проигрывается браузером как призрачное движение мыши, а «палец ушёл» — события не существует. А обработка вырезов на новых айфонах по всему сайту равнялась нулю, потому что в одном мета-теге не хватало одного атрибута. Каждый ховер теперь обязан ответить мне на вопрос: а что здесь делает палец.',
+          'Браузер охотно даст собрать десктопный сайт, который на телефоне всего лишь помещается. Помещаться и работать — разные вещи. Оглавление этого лога — самое тапаемое место страницы, и каждая его строка теперь не ниже сорока четырёх пикселей, размера подушечки пальца. Число из гайдлайнов, которое я знал наизусть и проигнорировал ровно там, где по нему тапают чаще всего.',
+        ],
+      },
     ],
     outro: [
       'Вот такой лог на сейчас. Каждое решение тут было разменом, и каждое я сделал осознанно, даже те, в которых потом сомневался.',
@@ -1064,6 +1090,28 @@ const jsonLd = [
     background: var(--bg-obsidian);
   }
 
+  /* Desktop's 128px of head-room is a dead zone on a phone (owner's
+     screenshot: a screenful of nothing above the back-link). 64px still
+     clears the fixed menu pill comfortably.
+     + --consent-sheet-height: on a first visit the cookie sheet (z 500,
+     bottom-fixed) covers the first TOC links that land in the bottom strip
+     of the viewport — nudging the content down keeps the non-interactive
+     header in that strip instead. Collapses to 0 once dismissed. */
+  @media (max-width: 767px) {
+    .log-page {
+      padding-top: calc(var(--space-16) + var(--consent-sheet-height, 0px));
+    }
+  }
+
+  /* Dismissing the sheet removes the var instantly while the sheet itself is
+     still sliding out for ~300ms — without this the content snaps up mid-exit.
+     Same pattern the orb and lang switcher already use for their bottom. */
+  @media (max-width: 767px) and (prefers-reduced-motion: no-preference) {
+    .log-page {
+      transition: padding-top var(--duration-normal) var(--ease-out);
+    }
+  }
+
   .log-page .container {
     max-width: var(--container-narrow);
   }
@@ -1196,6 +1244,22 @@ const jsonLd = [
     text-decoration: none;
   }
 
+  /* The TOC is the page's primary one-tap navigation, and its single-line
+     items measured ~38px tall with 4px gaps — under the 44px/8px touch
+     minimums (ui-ux-pro-max CRITICAL). min-height guarantees the target even
+     where the padding sum alone lands at ~42px. Mobile-scoped: desktop rows
+     with a pointer stay dense on purpose. */
+  @media (max-width: 767px) {
+    .log-index__list {
+      gap: var(--space-2);
+    }
+
+    .log-index__item {
+      padding: var(--space-3) 0;
+      min-height: 44px;
+    }
+  }
+
   .log-index__n {
     flex-shrink: 0;
     color: var(--accent-green-300);
@@ -1241,6 +1305,11 @@ const jsonLd = [
 
   .log-entry__head {
     display: flex;
+    /* flex-wrap: without it the 560px block's `flex-basis: 100%` on the date
+       was a no-op — a long wrapped slug squeezed the date into the same row
+       instead of dropping it underneath. Harmless at all widths: the row
+       only wraps when content actually overflows. */
+    flex-wrap: wrap;
     align-items: baseline;
     gap: var(--space-2);
     margin-bottom: var(--space-3);

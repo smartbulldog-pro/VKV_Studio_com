@@ -360,6 +360,22 @@ const jsonLd = [
     background: var(--bg-obsidian);
   }
 
+  /* Same mobile head-room trim as the Build Log — 128px is desktop air.
+     + --consent-sheet-height: same first-visit nudge as the log page, so the
+     cookie sheet covers header air instead of the first links. */
+  @media (max-width: 767px) {
+    .privacy-page {
+      padding-top: calc(var(--space-16) + var(--consent-sheet-height, 0px));
+    }
+  }
+
+  /* No snap when the sheet is dismissed mid-slide — see log page. */
+  @media (max-width: 767px) and (prefers-reduced-motion: no-preference) {
+    .privacy-page {
+      transition: padding-top var(--duration-normal) var(--ease-out);
+    }
+  }
+
   .privacy-header {
     text-align: left;
     margin-bottom: var(--space-12);

@@ -52,6 +52,11 @@
   border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
   padding: var(--space-2) var(--space-4);
+  /* A <select> sizes to its longest option and won't shrink — at 375px it
+     poked 4px past the viewport (measured), the page's only horizontal
+     scroll. Let it compress instead. */
+  max-width: 100%;
+  min-width: 0;
   font-family: var(--font-sans);
   font-size: var(--text-sm);
   outline: none;
