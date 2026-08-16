@@ -1094,6 +1094,17 @@ kbd {
       grid-template-columns: 1fr;
     }
 
+    /* The header holding the two model <select>s must stack like the panels
+       below it — its 1fr/auto/1fr tracks squeezed two intrinsically-wide
+       selects side by side and overflowed the 375px column. */
+    .compare__header {
+      grid-template-columns: 1fr;
+    }
+
+    .compare__divider {
+      padding: var(--space-1) 0;
+    }
+
     /* Prevent iOS Safari auto-zoom on focus (requires >=16px font-size) */
     .compare__select {
       font-size: 16px;

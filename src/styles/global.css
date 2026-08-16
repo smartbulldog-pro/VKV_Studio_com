@@ -347,7 +347,12 @@ h4 {
   width: 100%;
   max-width: var(--container-max);
   margin-inline: auto;
-  padding-inline: var(--container-padding);
+  /* max(padding, safe-area): on a notched phone in landscape the inset on
+     the camera side (~44px) is LARGER than the clamp'd padding at those
+     widths — edge text sat under the notch. Collapses to the plain padding
+     wherever env() is 0. */
+  padding-left: max(var(--container-padding), env(safe-area-inset-left, 0px));
+  padding-right: max(var(--container-padding), env(safe-area-inset-right, 0px));
 }
 
 .container--narrow {

@@ -675,4 +675,10 @@
   .prompt-block__role-select {
     font-size: 16px;
   }
+
+  /* Same mobile padding trim the other two Lab tools already carry —
+     24px of chrome per side is desktop air at 375px. */
+  .prompt__header {
+    padding: var(--space-4);
+  }
 }

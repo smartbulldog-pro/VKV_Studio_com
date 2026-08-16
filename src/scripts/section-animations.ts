@@ -24,9 +24,19 @@ gsap.registerPlugin(ScrollTrigger);
 
 const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-/** If user prefers reduced motion, make everything visible immediately */
-function disableAnimations(): void {
-  const allAnimated = document.querySelectorAll<HTMLElement>(
+/** Make animated content visible immediately (reduced motion, or a failed
+ *  init). Scoped: pass a section element to rescue ONLY that section — a
+ *  Contact failure must not stomp About/Lab/Stack's healthy ScrollTriggers. */
+function disableAnimations(root: Document | HTMLElement = document): void {
+  // Kill this root's triggers FIRST: a forced inline style means nothing if
+  // a stale scrubbed tween later replays against its recorded from-state.
+  ScrollTrigger.getAll().forEach((st) => {
+    const trigger = st.trigger;
+    if (root === document || (trigger instanceof Element && root.contains(trigger))) {
+      st.kill();
+    }
+  });
+  const allAnimated = root.querySelectorAll<HTMLElement>(
     '.js-about-reveal, .js-timeline-item, .js-timeline-dot, .js-timeline-card, .js-timeline-line, .js-lab-header, .js-lab-card, .lab__card-visual, .lab__card-content, .lab__card-cta, .js-stack-header, .js-stack-card, .js-stack-glass, .js-contact-reveal'
   );
   allAnimated.forEach((el) => {
@@ -59,21 +69,26 @@ export function initSectionAnimations(): void {
   // Each section's init is isolated: About/Lab/Stack/Contact all start at
   // opacity:0 in their scoped CSS and rely on these calls to ever appear.
   // One throw used to abort the rest of this synchronous chain — every
-  // section after the faulty one stayed invisible forever. If anything
-  // fails, degrade the WHOLE page to "visible, no animation" rather than
-  // leave content missing (disableAnimations already coexists with any
-  // ScrollTriggers that did get created — worst case a reveal replays).
-  const inits = [initAboutAnimations, initLabAnimations, initStackAnimations, initContactAnimations];
-  let anyFailed = false;
-  for (const init of inits) {
+  // section after the faulty one stayed invisible forever. A failure now
+  // degrades ONLY that section to "visible, no animation": the scoped
+  // disableAnimations also kills the section's own half-created triggers,
+  // while the healthy sections keep their reveals untouched.
+  const inits: Array<[string, () => void]> = [
+    ['about', initAboutAnimations],
+    ['lab', initLabAnimations],
+    ['stack', initStackAnimations],
+    ['contact', initContactAnimations],
+  ];
+  for (const [sectionId, init] of inits) {
     try {
       init();
     } catch (err) {
-      anyFailed = true;
-      console.error('[section-animations] section init failed:', err);
+      console.error(`[section-animations] ${sectionId} init failed:`, err);
+      const section = document.getElementById(sectionId);
+      if (section) disableAnimations(section);
+      else disableAnimations();
     }
   }
-  if (anyFailed) disableAnimations();
 }
 
 /* ── ABOUT SECTION ─────────────────────────────────────────── */

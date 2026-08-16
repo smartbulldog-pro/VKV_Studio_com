@@ -132,7 +132,16 @@ const { lang } = Astro.props;
     // static poster (already in the DOM, `.hero--static` CSS) stands in.
     // Checked once at init: this is a static site, viewport class doesn't
     // change without a reload crossing the breakpoint.
-    const isMobile = window.matchMedia('(max-width: 767px)').matches;
+    // Two clauses, not width alone: a phone rotated to landscape is 812px
+    // WIDE but 375px tall — width-only gating sent it down the desktop path
+    // and fetched the 24.5 MB scrub video on a cellular connection. "Short
+    // AND coarse-pointer" catches rotated phones while leaving 720p laptops
+    // (short but fine-pointer) and iPads (768+ on both axes) on desktop.
+    // HeroLangSwitcher.svelte gates its visibility branch and mobile CSS on
+    // the SAME query — keep them in lockstep.
+    const isMobile = window.matchMedia(
+      '(max-width: 767px), ((max-height: 767px) and (pointer: coarse))'
+    ).matches;
     const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
     if (isMobile || prefersReducedMotion) {

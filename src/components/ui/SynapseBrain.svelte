@@ -68,7 +68,10 @@
           const overlap = last.isIntersecting ? Math.round(last.intersectionRect.height) : 0;
           document.documentElement.style.setProperty('--footer-clearance', `${overlap}px`);
         },
-        { threshold: [0, 0.15, 0.3, 0.45, 0.6, 0.75, 0.9, 1] }
+        // 101 steps, not 8: the observer only fires on threshold CROSSINGS,
+        // so a fling that rests between coarse steps left the published value
+        // stale by up to ~15% of footer height. 1% bounds the error.
+        { threshold: Array.from({ length: 101 }, (_, i) => i / 100) }
       );
       footerObserver.observe(footerEl);
     }
@@ -199,8 +202,12 @@
   /* ── Container: ALWAYS a circle ────────────────────────────────── */
   .synapse-container {
     position: fixed;
-    bottom: 24px;
-    right: 24px;
+    /* --footer-clearance on the BASE rule, not just mobile: at 768-1023px
+       (and desktop) the orb's 80px box fully covered the footer's GitHub/
+       LinkedIn links at page bottom — measured, not guessed. env(): landscape
+       notch side + gesture strip, same as the mobile block. */
+    bottom: calc(24px + var(--footer-clearance, 0px));
+    right: calc(24px + env(safe-area-inset-right, 0px));
     z-index: 90;
 
     width: 80px;
@@ -357,7 +364,6 @@
   @media (max-width: 767px) {
     .synapse-container {
       left: auto !important;
-      right: 16px;
       /* --footer-clearance: published by the effect above while the footer
          intersects the viewport — the orb rides up so it never squats on the
          footer's links (every mobile visitor ends the page there).
@@ -365,6 +371,7 @@
          the true screen edge — in the installed PWA (standalone) the old flat
          16px put the orb inside the home-indicator swipe strip. */
       bottom: calc(16px + env(safe-area-inset-bottom, 0px) + var(--footer-clearance, 0px));
+      right: calc(16px + env(safe-area-inset-right, 0px));
       transform: none !important;
       width: 64px;
       height: 64px;
@@ -394,6 +401,17 @@
   }
 
   @media (max-width: 767px) and (prefers-reduced-motion: no-preference) {
+    .synapse-container {
+      transition:
+        box-shadow var(--duration-normal) var(--ease-out),
+        border-color var(--duration-normal) var(--ease-out),
+        bottom var(--duration-normal) var(--ease-out);
+    }
+  }
+
+  /* Desktop/tablet ride above the footer eases too — without this the new
+     base-rule footer clearance would jump-cut at each observer step. */
+  @media (min-width: 768px) and (prefers-reduced-motion: no-preference) {
     .synapse-container {
       transition:
         box-shadow var(--duration-normal) var(--ease-out),

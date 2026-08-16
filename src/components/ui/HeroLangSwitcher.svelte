@@ -31,7 +31,14 @@
 
   /* ── Sync visibility with the hero ─────────────────────── */
   $effect(() => {
-    const isMobile = window.matchMedia('(max-width: 767px)').matches;
+    // Same two-clause query as HeroCanvas.astro's hero--static gate — the
+    // branches below MUST agree with it: on any viewport where the scrub
+    // engine never runs, the desktop opacity signal is never written and
+    // the switcher would float forever (that was hero-1 in portrait; a
+    // rotated phone hits the identical trap through the width clause alone).
+    const isMobile = window.matchMedia(
+      '(max-width: 767px), ((max-height: 767px) and (pointer: coarse))'
+    ).matches;
 
     if (isMobile) {
       // Mobile: scroll-engine.ts never runs (HeroCanvas's init() takes the
@@ -373,8 +380,11 @@
 <style>
   .hero-lang {
     position: fixed;
-    bottom: 3rem;
-    left: 2rem;
+    /* env() on the BASE rule too: a notched phone in landscape is ≥768px
+       wide, so the mobile blocks below never fire there — without this the
+       widget sat inside the ~44px notch inset. 0px on regular screens. */
+    bottom: calc(3rem + env(safe-area-inset-bottom, 0px));
+    left: calc(2rem + env(safe-area-inset-left, 0px));
     width: 80px;
     height: 110px;
     z-index: 20;
@@ -404,11 +414,11 @@
     pointer-events: none !important;
   }
 
-  /* 767, not 768: the mobile/desktop LOGIC split (this file's visibility
-     branch + HeroCanvas's hero--static) is matchMedia(max-width: 767px) —
-     at exactly 768px an iPad portrait runs the desktop scrub, so it must
-     get the desktop widget too. */
-  @media (max-width: 767px) {
+  /* Same two-clause query as the JS logic split (this file's visibility
+     branch + HeroCanvas's hero--static): 767 not 768 so an iPad portrait
+     that runs the desktop scrub gets the desktop widget, and the
+     short+coarse clause so a rotated phone gets the mobile one. */
+  @media (max-width: 767px), ((max-height: 767px) and (pointer: coarse)) {
     .hero-lang {
       /* env(): viewport-fit=cover means the true screen edge — keep the
          widget clear of the home-indicator strip in the installed PWA. */

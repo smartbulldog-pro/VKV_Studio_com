@@ -952,7 +952,11 @@
   }
 
   /* ── Responsive ────────────────────────────────────── */
-  @media (max-width: 768px) {
+  /* Same two-clause query as HeroCanvas's hero--static gate: 767 (not 768 —
+     an iPad portrait runs the desktop scrub and must get desktop styles),
+     plus short+coarse so a rotated phone gets the frosted panel over the
+     static poster instead of a desktop layout squeezed into 375px height. */
+  @media (max-width: 767px), ((max-height: 767px) and (pointer: coarse)) {
     .hero-overlay__content {
       gap: var(--space-3);
       /* Frosted backdrop so the text stops drowning in the bright neural

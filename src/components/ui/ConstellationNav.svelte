@@ -53,6 +53,23 @@
   const { lang }: Props = $props();
 
   let isOpen = $state(false);
+
+  // Cached, not re-queried per mousemove — the guard in onMouseMove sits in a
+  // hot handler and a fresh matchMedia() parse per event is the naive form of
+  // the repo's own idiom (PromptApp/EmbeddingScene cache + change-listen).
+  // Width-based on purpose: it must agree with the CSS that hides .nav-canvas
+  // and shows .mobile-nav, both gated at (max-width: 767px).
+  let isMobileNav = false;
+  $effect(() => {
+    const mq = window.matchMedia('(max-width: 767px)');
+    isMobileNav = mq.matches;
+    const onChange = (e: MediaQueryListEvent) => {
+      isMobileNav = e.matches;
+    };
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  });
+
   let canvasEl: HTMLCanvasElement | undefined = $state();
   let overlayEl: HTMLElement | undefined = $state();
   let videoEl: HTMLVideoElement | undefined = $state();
@@ -1206,7 +1223,7 @@
     // display:none on phones) — a background tap could navigate somewhere
     // random instead of just closing. handleClick's else-branch (onClose)
     // is still wanted on mobile, so only the hit-testing is gated.
-    if (window.matchMedia('(max-width: 767px)').matches) return;
+    if (isMobileNav) return;
     const rect = overlayEl.getBoundingClientRect();
     rawMouseX = (e.clientX - rect.left) / rect.width;
     rawMouseY = (e.clientY - rect.top) / rect.height;
@@ -1289,6 +1306,11 @@
   function triggerLangSwitch(): void {
     langFlashActive = true;
     langFlashStart = frameCount;
+    // Mobile: the flash canvas is display:none, so the 300ms delay shows
+    // nothing — and if the navigation stalls on a bad connection the dialog
+    // stayed mounted with the focus trap armed and aria-expanded stuck.
+    // Close immediately; the timeout still fires and navigates.
+    if (isMobileNav) onClose();
     setTimeout(() => {
       window.location.href = `/${altLang}/`;
     }, 300);
@@ -1297,6 +1319,7 @@
   function triggerLogNav(): void {
     logFlashActive = true;
     logFlashStart = frameCount;
+    if (isMobileNav) onClose(); // see triggerLangSwitch
     setTimeout(() => {
       window.location.href = `/${lang}/log/`;
     }, 300);
@@ -1419,6 +1442,20 @@
     // behind it. Same pattern SynapseTerminal already uses.
     const previouslyFocused = document.activeElement as HTMLElement | null;
 
+    // aria-modal alone doesn't remove the page behind the dialog from the
+    // accessibility tree — a screen reader's virtual cursor could still reach
+    // and activate the hero language switcher through the opaque overlay.
+    // Native inert on every body child except our own wrapper does. Only
+    // elements WE inerted get restored, so anything already inert stays so.
+    const overlayRoot = document.getElementById('constellation-nav-overlay');
+    const inerted: HTMLElement[] = [];
+    for (const child of Array.from(document.body.children)) {
+      if (child instanceof HTMLElement && child !== overlayRoot && !child.inert) {
+        child.inert = true;
+        inerted.push(child);
+      }
+    }
+
     const focusables = (): HTMLElement[] => {
       if (!overlayEl) return [];
       return Array.from(
@@ -1459,6 +1496,10 @@
     window.addEventListener('keydown', onKey);
     return () => {
       window.removeEventListener('keydown', onKey);
+      // Un-inert BEFORE restoring focus — an inert element refuses focus.
+      inerted.forEach((el) => {
+        el.inert = false;
+      });
       // Return focus to whatever opened the menu.
       if (previouslyFocused && typeof previouslyFocused.focus === 'function') {
         previouslyFocused.focus();
@@ -1742,10 +1783,30 @@
     align-items: center;
     justify-content: center;
     height: 100%;
+    /* Safety net, unconditional: if content ever outgrows the viewport
+       (landscape, large text, a new item), it scrolls instead of clipping. */
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
   }
   @media (max-width: 767px) {
     .mobile-nav {
       display: flex;
+    }
+  }
+
+  /* Short viewports (phone landscape): centering an overflowing flex column
+     clips BOTH edges — switch to flex-start and tighten spacing so all items
+     fit or scroll cleanly from the top. */
+  @media (max-width: 767px) and (max-height: 480px) {
+    .mobile-nav {
+      justify-content: flex-start;
+      padding-block: 16px;
+    }
+    .mobile-item {
+      padding: 10px 24px;
+    }
+    .lang-switch-mobile {
+      margin-top: 12px;
     }
   }
 

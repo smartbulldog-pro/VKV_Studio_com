@@ -852,6 +852,9 @@
   font-size: var(--text-sm);
   color: var(--text-secondary);
   line-height: var(--leading-normal);
+  /* Arbitrary corpus text — long unbroken tokens must wrap, not overflow
+     (the Tokenizer's output panels already defend this way). */
+  overflow-wrap: break-word;
 }
 
 .search-panel__result-score {
@@ -962,6 +965,11 @@
   padding: var(--space-2) var(--space-4);
   font-family: var(--font-sans);
   font-size: var(--text-sm);
+  /* Same failure mode .embeddings__model-select already documents: a <select>
+     sizes to its longest option (RU strategy names) and will not shrink,
+     overflowing the single ~279px column at 375px. */
+  max-width: 100%;
+  min-width: 0;
   outline: none;
   cursor: pointer;
   transition: var(--transition-colors);
@@ -1076,6 +1084,7 @@
   color: var(--text-secondary);
   line-height: var(--leading-normal);
   white-space: pre-wrap;
+  overflow-wrap: break-word; /* see .search-panel__result-text */
 }
 
 /* ══════════════════════════════════════════════════
@@ -1260,6 +1269,7 @@
   font-size: var(--text-xs);
   color: var(--text-secondary);
   line-height: var(--leading-normal);
+  overflow-wrap: break-word; /* see .search-panel__result-text */
 }
 
 .rerank-panel__result-score {

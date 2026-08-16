@@ -799,7 +799,10 @@ const content: Record<Lang, LogContent> = {
       },
       {
         n: '23',
-        slug: 'den-kogda-ya-dvazhdy-ugadyval-i-dvazhdy-oshibsya',
+        /* Same slug in both locales — every other entry shares one English
+           slug; the transliterated one leaked into visible UI text and split
+           the schema @id between languages. */
+        slug: 'the-day-i-guessed-twice-and-was-wrong-twice',
         date: '2026-08-09',
         title: 'День, когда я дважды прикинул и дважды ошибся',
         lead: 'Это запись про то, как сайт перестал жить на моём ноутбуке. И ещё про то, как меня дважды за день поймали на прикидке вместо замера — и оба раза замер сказал не то, что я ожидал.',
@@ -866,6 +869,12 @@ const content: Record<Lang, LogContent> = {
   },
 };
 
+// The boot line announcing the entry count is derived, not hand-typed:
+// git history shows the literal was manually bumped on every single
+// log-entry commit — the one dance step everyone eventually misses.
+content.en.bootLines[1] = `> loading decisions ... ${content.en.entries.length}`;
+content.ru.bootLines[1] = `> гружу решения ... ${content.ru.entries.length}`;
+
 const page = content[activeLang] || content.en;
 const metaTitle = t(activeLang, 'log.metaTitle');
 const metaDescription = t(activeLang, 'log.metaDescription');
@@ -914,8 +923,8 @@ const jsonLd = [
       '@type': 'BlogPosting',
       '@id': `${logUrl}#${entry.slug}`,
       // No mainEntityOfPage here on purpose: a URL fragment is not a separate
-      // page, so 23 postings all claiming to be the main entity of /log/ is 23
-      // contradictory claims about one document. @id + url still give crawlers
+      // page, so a page of postings all claiming to be the main
+      // entity of /log/ is that many contradictory claims about one document. @id + url still give crawlers
       // the deep-link anchor, which was the actual goal.
       url: `${logUrl}#${entry.slug}`,
       image: `https://vkvstudio.com/og-cover${activeLang === 'ru' ? '-ru' : ''}.jpg`,
@@ -1305,14 +1314,20 @@ const jsonLd = [
 
   .log-entry__head {
     display: flex;
-    /* flex-wrap: without it the 560px block's `flex-basis: 100%` on the date
-       was a no-op — a long wrapped slug squeezed the date into the same row
-       instead of dropping it underneath. Harmless at all widths: the row
-       only wraps when content actually overflows. */
-    flex-wrap: wrap;
     align-items: baseline;
     gap: var(--space-2);
     margin-bottom: var(--space-3);
+  }
+
+  /* flex-wrap: without it the 560px block's `flex-basis: 100%` on the date
+     was a no-op — a long wrapped slug squeezed the date into the same row
+     instead of dropping it underneath. Scoped to ≤767px: the container caps
+     at --container-narrow, so desktop's row width is constant (~624px) and
+     wrapping there would be a layout change nobody asked for. */
+  @media (max-width: 767px) {
+    .log-entry__head {
+      flex-wrap: wrap;
+    }
   }
 
   .log-entry__marker {

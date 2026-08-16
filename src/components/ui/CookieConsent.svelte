@@ -150,7 +150,10 @@
     position: fixed;
     left: var(--space-4);
     right: var(--space-4);
-    bottom: var(--space-4);
+    /* max(): structural safe-area guarantee for the floating-card variant
+       too, not just the ≤640px sheet — otherwise any future spacing tweak
+       silently re-buries the card under the gesture strip. */
+    bottom: max(var(--space-4), env(safe-area-inset-bottom, 0px));
     z-index: 500;
     max-width: 440px;
     margin-inline: auto;

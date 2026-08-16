@@ -127,7 +127,10 @@ const jsonLd = [
   .lab-container {
     max-width: var(--container-max);
     margin: 0 auto;
-    padding: 0 var(--container-padding);
+    /* Mirrors .container's safe-area guard (global.css) — this rule bypasses
+       .container and used to reimplement the unguarded pattern. */
+    padding: 0 max(var(--container-padding), env(safe-area-inset-right, 0px)) 0
+      max(var(--container-padding), env(safe-area-inset-left, 0px));
     display: flex;
     flex-direction: column;
     gap: var(--space-8);
